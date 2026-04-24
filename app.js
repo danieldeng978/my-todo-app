@@ -1,7 +1,8 @@
-// public/app.js - 前端逻辑（改用 localStorage 存储数据）
-// 这样就不需要后端了，可以直接部署到 GitHub Pages
+// public/app.js - Firebase 版本
+// 使用 Firebase Realtime Database REST API
 
-const STORAGE_KEY = 'todos_data';
+const DATABASE_URL = 'https://first-ad067-default-rtdb.asia-southeast1.firebasedatabase.app';
+const API_KEY = 'AIzaSyDexample123456789';  // 临时用，实际从Firebase获取
 
 // DOM 元素
 const todoInput = document.getElementById('todoInput');
@@ -12,68 +13,89 @@ const completedCount = document.getElementById('completedCount');
 const pendingCount = document.getElementById('pendingCount');
 const messageEl = document.getElementById('message');
 
-// ==================== 数据操作 ====================
+// ==================== Firebase REST API ====================
 
-// 生成唯一 ID
-function generateId() {
-  return Date.now().toString(36) + Math.random().toString(36).substr(2);
-}
-
-// 从 localStorage 读取数据
-function getTodos() {
-  const data = localStorage.getItem(STORAGE_KEY);
-  return data ? JSON.parse(data) : [];
-}
-
-// 保存数据到 localStorage
-function saveTodos(todos) {
-  localStorage.setItem(STORAGE_KEY, JSON.stringify(todos));
-}
-
-// ==================== CRUD 操作 ====================
-
-function addTodo(title) {
-  if (!title.trim()) return;
-  
-  const todos = getTodos();
-  const newTodo = {
-    id: generateId(),
-    title: title.trim(),
-    completed: false,
-    created_at: new Date().toISOString()
-  };
-  
-  todos.unshift(newTodo);
-  saveTodos(todos);
-  renderTodos();
-  updateStats();
-  showMessage('添加成功！', 'success');
-}
-
-function toggleTodo(id) {
-  const todos = getTodos();
-  const todo = todos.find(t => t.id === id);
-  if (todo) {
-    todo.completed = !todo.completed;
-    saveTodos(todos);
-    renderTodos();
-    updateStats();
+// 获取所有待办
+async function fetchTodos() {
+  try {
+    const response = await fetch(`${DATABASE_URL}/todos.json`);
+    const data = await response.json();
+    const todos = data ? Object.entries(data).map(([id, todo]) => ({ id, ...todo })) : [];
+    renderTodos(todos);
+    updateStats(todos);
+  } catch (error) {
+    showMessage('获取数据失败: ' + error.message, 'error');
   }
 }
 
-function deleteTodo(id) {
-  let todos = getTodos();
-  todos = todos.filter(t => t.id !== id);
-  saveTodos(todos);
-  renderTodos();
-  updateStats();
-  showMessage('删除成功！', 'success');
+// 添加待办
+async function addTodo(title) {
+  if (!title.trim()) return;
+  
+  try {
+    const newTodo = {
+      title: title.trim(),
+      completed: false,
+      created_at: new Date().toISOString()
+    };
+    
+    const response = await fetch(`${DATABASE_URL}/todos.json`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(newTodo)
+    });
+    
+    if (!response.ok) throw new Error('添加失败');
+    
+    showMessage('添加成功！', 'success');
+    fetchTodos();
+    todoInput.value = '';
+  } catch (error) {
+    showMessage('添加失败: ' + error.message, 'error');
+  }
+}
+
+// 切换完成状态
+async function toggleTodo(id, currentCompleted) {
+  try {
+    // 先获取当前数据
+    const getResponse = await fetch(`${DATABASE_URL}/todos/${id}.json`);
+    const todo = await getResponse.json();
+    
+    // 更新
+    const updateResponse = await fetch(`${DATABASE_URL}/todos/${id}.json`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ completed: !currentCompleted })
+    });
+    
+    if (!updateResponse.ok) throw new Error('更新失败');
+    
+    fetchTodos();
+  } catch (error) {
+    showMessage('更新失败: ' + error.message, 'error');
+  }
+}
+
+// 删除待办
+async function deleteTodo(id) {
+  try {
+    const response = await fetch(`${DATABASE_URL}/todos/${id}.json`, {
+      method: 'DELETE'
+    });
+    
+    if (!response.ok) throw new Error('删除失败');
+    
+    showMessage('删除成功！', 'success');
+    fetchTodos();
+  } catch (error) {
+    showMessage('删除失败: ' + error.message, 'error');
+  }
 }
 
 // ==================== 渲染函数 ====================
 
-function renderTodos() {
-  const todos = getTodos();
+function renderTodos(todos) {
   todoList.innerHTML = '';
   
   if (todos.length === 0) {
@@ -95,7 +117,7 @@ function renderTodos() {
         type="checkbox" 
         class="todo-checkbox" 
         ${todo.completed ? 'checked' : ''}
-        onchange="toggleTodo('${todo.id}')"
+        onchange="toggleTodo('${todo.id}', ${todo.completed})"
       >
       <span class="todo-text">${escapeHtml(todo.title)}</span>
       <button class="delete-btn" onclick="deleteTodo('${todo.id}')">删除</button>
@@ -105,8 +127,7 @@ function renderTodos() {
   });
 }
 
-function updateStats() {
-  const todos = getTodos();
+function updateStats(todos) {
   const total = todos.length;
   const completed = todos.filter(t => t.completed).length;
   const pending = total - completed;
@@ -136,30 +157,19 @@ function escapeHtml(text) {
 
 addBtn.addEventListener('click', () => {
   const title = todoInput.value.trim();
-  if (title) {
-    addTodo(title);
-    todoInput.value = '';
-    todoInput.focus();
-  }
+  if (title) addTodo(title);
 });
 
 todoInput.addEventListener('keypress', (e) => {
   if (e.key === 'Enter') {
     const title = todoInput.value.trim();
-    if (title) {
-      addTodo(title);
-      todoInput.value = '';
-    }
+    if (title) addTodo(title);
   }
 });
 
 // ==================== 初始化 ====================
 
-document.addEventListener('DOMContentLoaded', () => {
-  renderTodos();
-  updateStats();
-});
+document.addEventListener('DOMContentLoaded', fetchTodos);
 
-// 暴露函数到全局
 window.toggleTodo = toggleTodo;
 window.deleteTodo = deleteTodo;
