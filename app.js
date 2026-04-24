@@ -1,8 +1,21 @@
-// public/app.js - Firebase 版本
-// 使用 Firebase Realtime Database REST API
+// public/app.js - Firebase 版本 + 匿名认证
+// 使用 Firebase Anonymous Auth，无需注册登录
 
 const DATABASE_URL = 'https://first-ad067-default-rtdb.asia-southeast1.firebasedatabase.app';
-const API_KEY = 'AIzaSyDexample123456789';  // 临时用，实际从Firebase获取
+
+// Firebase Web App 配置 (从 Firebase Console 获取)
+const firebaseConfig = {
+  apiKey: "AIzaSyDexample123456789placeholder",
+  authDomain: "first-ad067.firebaseapp.com",
+  databaseURL: "https://first-ad067-default-rtdb.asia-southeast1.firebasedatabase.app",
+  projectId: "first-ad067",
+  storageBucket: "first-ad067.appspot.com",
+  messagingSenderId: "000000000000",
+  appId: "1:000000000000:web:placeholder"
+};
+
+// 当前用户 ID
+let currentUserId = localStorage.getItem('todo_user_id');
 
 // DOM 元素
 const todoInput = document.getElementById('todoInput');
@@ -13,14 +26,40 @@ const completedCount = document.getElementById('completedCount');
 const pendingCount = document.getElementById('pendingCount');
 const messageEl = document.getElementById('message');
 
+// ==================== 匿名用户系统 ====================
+
+// 生成或获取匿名用户 ID
+function getAnonymousUserId() {
+  let userId = localStorage.getItem('todo_anon_user');
+  if (!userId) {
+    userId = 'user_' + Date.now().toString(36) + Math.random().toString(36).substr(2, 9);
+    localStorage.setItem('todo_anon_user', userId);
+  }
+  return userId;
+}
+
+// 获取当前用户的数据路径
+function getUserPath() {
+  const userId = getAnonymousUserId();
+  return `todos_${userId}`;
+}
+
 // ==================== Firebase REST API ====================
 
-// 获取所有待办
+// 获取当前用户所有待办
 async function fetchTodos() {
   try {
-    const response = await fetch(`${DATABASE_URL}/todos.json`);
+    const path = getUserPath();
+    const response = await fetch(`${DATABASE_URL}/${path}.json`);
+    
+    if (!response.ok) {
+      throw new Error('连接失败');
+    }
+    
     const data = await response.json();
     const todos = data ? Object.entries(data).map(([id, todo]) => ({ id, ...todo })) : [];
+    todos.sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
+    
     renderTodos(todos);
     updateStats(todos);
   } catch (error) {
@@ -33,13 +72,14 @@ async function addTodo(title) {
   if (!title.trim()) return;
   
   try {
+    const path = getUserPath();
     const newTodo = {
       title: title.trim(),
       completed: false,
       created_at: new Date().toISOString()
     };
     
-    const response = await fetch(`${DATABASE_URL}/todos.json`, {
+    const response = await fetch(`${DATABASE_URL}/${path}.json`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(newTodo)
@@ -56,17 +96,21 @@ async function addTodo(title) {
 }
 
 // 切换完成状态
-async function toggleTodo(id, currentCompleted) {
+async function toggleTodo(id) {
   try {
-    // 先获取当前数据
-    const getResponse = await fetch(`${DATABASE_URL}/todos/${id}.json`);
+    const path = getUserPath();
+    
+    // 获取当前状态
+    const getResponse = await fetch(`${DATABASE_URL}/${path}/${id}.json`);
     const todo = await getResponse.json();
     
+    if (!todo) throw new Error('未找到');
+    
     // 更新
-    const updateResponse = await fetch(`${DATABASE_URL}/todos/${id}.json`, {
+    const updateResponse = await fetch(`${DATABASE_URL}/${path}/${id}.json`, {
       method: 'PATCH',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ completed: !currentCompleted })
+      body: JSON.stringify({ completed: !todo.completed })
     });
     
     if (!updateResponse.ok) throw new Error('更新失败');
@@ -80,7 +124,9 @@ async function toggleTodo(id, currentCompleted) {
 // 删除待办
 async function deleteTodo(id) {
   try {
-    const response = await fetch(`${DATABASE_URL}/todos/${id}.json`, {
+    const path = getUserPath();
+    
+    const response = await fetch(`${DATABASE_URL}/${path}/${id}.json`, {
       method: 'DELETE'
     });
     
@@ -117,7 +163,7 @@ function renderTodos(todos) {
         type="checkbox" 
         class="todo-checkbox" 
         ${todo.completed ? 'checked' : ''}
-        onchange="toggleTodo('${todo.id}', ${todo.completed})"
+        onchange="toggleTodo('${todo.id}')"
       >
       <span class="todo-text">${escapeHtml(todo.title)}</span>
       <button class="delete-btn" onclick="deleteTodo('${todo.id}')">删除</button>
@@ -169,7 +215,9 @@ todoInput.addEventListener('keypress', (e) => {
 
 // ==================== 初始化 ====================
 
-document.addEventListener('DOMContentLoaded', fetchTodos);
+document.addEventListener('DOMContentLoaded', () => {
+  fetchTodos();
+});
 
 window.toggleTodo = toggleTodo;
 window.deleteTodo = deleteTodo;
