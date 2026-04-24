@@ -171,6 +171,57 @@ button:hover {
   color: #721c24;
 }
 
+/* 离线状态 */
+.offline-status {
+  background: #fff3cd;
+  color: #856404;
+  padding: 10px;
+  text-align: center;
+  border-radius: 8px;
+  margin-bottom: 15px;
+  font-size: 14px;
+}
+
+/* PWA 安装提示 */
+.install-prompt {
+  position: fixed;
+  bottom: 20px;
+  left: 50%;
+  transform: translateX(-50%);
+  background: #667eea;
+  color: white;
+  padding: 12px 20px;
+  border-radius: 30px;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  box-shadow: 0 4px 20px rgba(102, 126, 234, 0.4);
+  font-size: 14px;
+  z-index: 1000;
+  animation: slideUp 0.3s ease;
+}
+
+.install-prompt button {
+  background: white;
+  color: #667eea;
+  border: none;
+  padding: 8px 16px;
+  border-radius: 20px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+@keyframes slideUp {
+  from {
+    transform: translateX(-50%) translateY(100px);
+    opacity: 0;
+  }
+  to {
+    transform: translateX(-50%) translateY(0);
+    opacity: 1;
+  }
+}
+
 /* 空状态 */
 .empty-state {
   text-align: center;
