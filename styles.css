@@ -706,6 +706,92 @@ button:hover {
   cursor: pointer;
 }
 
+/* 通知按钮 */
+.notification-btn {
+  padding: 8px 12px;
+  border: none;
+  border-radius: 8px;
+  font-size: 12px;
+  cursor: pointer;
+  font-weight: 500;
+}
+
+.notification-btn.enabled {
+  background: #27ae60;
+  color: white;
+}
+
+.notification-btn.disabled {
+  background: #95a5a6;
+  color: white;
+}
+
+/* 应用内通知 */
+.in-app-notification {
+  position: fixed;
+  top: 20px;
+  right: 20px;
+  background: white;
+  border-radius: 12px;
+  padding: 15px 20px;
+  box-shadow: 0 10px 40px rgba(0,0,0,0.2);
+  z-index: 9999;
+  display: flex;
+  align-items: center;
+  gap: 15px;
+  animation: slideIn 0.3s ease;
+  max-width: 320px;
+}
+
+.in-app-notification.success {
+  border-left: 4px solid #27ae60;
+}
+
+.in-app-notification.error {
+  border-left: 4px solid #e74c3c;
+}
+
+.in-app-notification.info {
+  border-left: 4px solid #3498db;
+}
+
+.in-app-notification .notification-content {
+  flex: 1;
+}
+
+.in-app-notification .notification-content strong {
+  display: block;
+  margin-bottom: 5px;
+  color: #333;
+}
+
+.in-app-notification .notification-content p {
+  margin: 0;
+  color: #666;
+  font-size: 13px;
+}
+
+.in-app-notification button {
+  background: none;
+  border: none;
+  font-size: 20px;
+  color: #999;
+  cursor: pointer;
+  padding: 0;
+  line-height: 1;
+}
+
+@keyframes slideIn {
+  from {
+    transform: translateX(100%);
+    opacity: 0;
+  }
+  to {
+    transform: translateX(0);
+    opacity: 1;
+  }
+}
+
 /* 登出按钮 */
 .logout-btn {
   background: #dc3545 !important;

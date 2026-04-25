@@ -1,5 +1,5 @@
-// public/app.js - Todo App V8: Share/Collaboration
-// 添加分享/协作功能
+// public/app.js - Todo App V9: Push Notifications
+// 添加推送通知功能
 
 const DATABASE_URL = 'https://first-ad067-default-rtdb.asia-southeast1.firebasedatabase.app';
 
@@ -14,6 +14,8 @@ let categories = [];
 let showStats = false;
 let currentShareCode = localStorage.getItem('todo_share_code');
 let isSharedMode = false;
+let notificationsEnabled = localStorage.getItem('todo_notifications') === 'true';
+let lastNotificationCheck = localStorage.getItem('todo_last_notification_check');
 
 // 优先级
 const PRIORITIES = [
@@ -59,6 +61,128 @@ function escapeHtml(text) {
 
 function escapeRegex(string) {
   return string.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
+// ==================== 通知系统 ====================
+
+async function requestNotificationPermission() {
+  if (!('Notification' in window)) {
+    showMessage('您的浏览器不支持通知', 'error');
+    return false;
+  }
+  
+  if (Notification.permission === 'granted') {
+    return true;
+  }
+  
+  if (Notification.permission !== 'denied') {
+    const permission = await Notification.requestPermission();
+    if (permission === 'granted') {
+      notificationsEnabled = true;
+      localStorage.setItem('todo_notifications', 'true');
+      showMessage('已开启通知!', 'success');
+      updateNotificationUI();
+      return true;
+    }
+  }
+  
+  showMessage('通知权限被拒绝', 'error');
+  return false;
+}
+
+function toggleNotifications() {
+  if (notificationsEnabled) {
+    notificationsEnabled = false;
+    localStorage.setItem('todo_notifications', 'false');
+    showMessage('已关闭通知', 'success');
+  } else {
+    requestNotificationPermission();
+  }
+  updateNotificationUI();
+}
+
+function updateNotificationUI() {
+  const btn = document.getElementById('notificationBtn');
+  if (btn) {
+    if (notificationsEnabled) {
+      btn.innerHTML = '🔔 通知开';
+      btn.className = 'notification-btn enabled';
+    } else {
+      btn.innerHTML = '🔕 通知关';
+      btn.className = 'notification-btn disabled';
+    }
+  }
+}
+
+function sendNotification(title, body, icon = '📋') {
+  if (!notificationsEnabled || Notification.permission !== 'granted') return;
+  
+  try {
+    const notification = new Notification(title, {
+      body: body,
+      icon: icon,
+      badge: icon,
+      tag: 'todo-app',
+      requireInteraction: false,
+      silent: false
+    });
+    
+    notification.onclick = () => {
+      window.focus();
+      notification.close();
+    };
+    
+    setTimeout(() => notification.close(), 5000);
+  } catch (e) {
+    console.log('Notification error:', e);
+  }
+}
+
+async function checkDueNotifications() {
+  if (!authToken || !notificationsEnabled) return;
+  
+  const now = new Date().toISOString().split('T')[0];
+  const todos = await fetchTodosRaw();
+  
+  const overdue = todos.filter(t => t.dueDate && !t.completed && t.dueDate < now);
+  const dueToday = todos.filter(t => t.dueDate && !t.completed && t.dueDate === now);
+  
+  // 只在有新的过期/今日到期时通知
+  const lastCheck = localStorage.getItem('todo_last_notification_check') || '';
+  const today = new Date().toDateString();
+  
+  if (lastCheck !== today) {
+    if (overdue.length > 0) {
+      sendNotification('⚠️ 有待办已过期', `您有 ${overdue.length} 条待办已过期`, '🔴');
+    }
+    if (dueToday.length > 0) {
+      sendNotification('📅 今天有待办到期', `您有 ${dueToday.length} 条待办今天到期`, '🟡');
+    }
+    localStorage.setItem('todo_last_notification_check', today);
+  }
+}
+
+function showInAppNotification(title, message, type = 'info') {
+  const existing = document.querySelector('.in-app-notification');
+  if (existing) existing.remove();
+  
+  const notification = document.createElement('div');
+  notification.className = `in-app-notification ${type}`;
+  notification.innerHTML = `
+    <div class="notification-content">
+      <strong>${title}</strong>
+      <p>${message}</p>
+    </div>
+    <button onclick="this.parentElement.remove()">×</button>
+  `;
+  
+  document.body.appendChild(notification);
+  
+  setTimeout(() => {
+    if (notification.parentElement) {
+      notification.remove();
+    }
+  }, 5000);
 }
 
 // ==================== 用户系统 ====================
@@ -107,6 +231,7 @@ async function login(email, password) {
     localStorage.removeItem('todo_share_code');
     showApp();
     showMessage(`欢迎回来，${email}！`, 'success');
+    checkDueNotifications();
   } catch (error) {
     showMessage(error.message, 'error');
   }
@@ -149,14 +274,12 @@ async function createShare() {
   try {
     const shareCode = generateShareCode();
     
-    // 创建分享数据存储
     await fetch(`${DATABASE_URL}/shared_${shareCode}.json`, {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ todos: [], created: new Date().toISOString(), owner: authToken })
     });
     
-    // 复制当前分类
     const cats = await fetchCategories();
     for (const cat of cats) {
       await fetch(`${DATABASE_URL}/shared_cat_${shareCode}/${cat.id}.json`, {
@@ -166,7 +289,6 @@ async function createShare() {
       });
     }
     
-    // 复制当前待办
     const todos = await fetchTodosRaw();
     for (const todo of todos) {
       const newTodo = { ...todo };
@@ -182,7 +304,6 @@ async function createShare() {
     isSharedMode = true;
     localStorage.setItem('todo_share_code', shareCode);
     
-    // 显示分享码
     const shareUrl = `https://danieldeng978.github.io/my-todo-app/?share=${shareCode}`;
     
     if (confirm(`分享码: ${shareCode}\n\n链接: ${shareUrl}\n\n是否复制链接?`)) {
@@ -203,7 +324,6 @@ async function joinShare() {
   const code = shareCode.trim().toUpperCase();
   
   try {
-    // 检查分享是否存在
     const response = await fetch(`${DATABASE_URL}/shared_${code}.json`);
     if (!response.ok) throw new Error('分享不存在');
     
@@ -218,7 +338,7 @@ async function joinShare() {
   }
 }
 
-async function exitShare() {
+function exitShare() {
   isSharedMode = false;
   currentShareCode = null;
   localStorage.removeItem('todo_share_code');
@@ -362,6 +482,11 @@ async function toggleTodo(id) {
     const getResponse = await fetch(url + '.json');
     const todo = await getResponse.json();
     
+    // 完成时发送通知
+    if (!todo.completed && notificationsEnabled) {
+      sendNotification('✅ 待办完成', `"${todo.title.slice(0, 20)}..." 已完成`, '🎉');
+    }
+    
     await fetch(url, {
       method: 'PATCH',
       headers: { 'Content-Type': 'application/json' },
@@ -411,6 +536,12 @@ async function setDueDate(id, currentDate) {
         body: JSON.stringify({ dueDate: newDate })
       });
       showMessage('已设置日期', 'success');
+      
+      // 设置日期时提醒
+      const today = new Date().toISOString().split('T')[0];
+      if (newDate === today && notificationsEnabled) {
+        sendNotification('📅 截知提醒已设置', `今天到期: ${newDate}`, '🟡');
+      }
     }
     fetchTodos();
   } catch (error) {
@@ -521,7 +652,7 @@ async function exportData() {
     const todos = await fetchTodosRaw();
     const cats = await fetchCategories();
     const exportData = {
-      version: 'V8',
+      version: 'V9',
       exportDate: new Date().toISOString(),
       userEmail: userEmail,
       todos: todos,
@@ -743,7 +874,7 @@ function showAddCategory() {
 function showLogin() {
   document.querySelector('header').innerHTML = `
     <h1>📝 Todo App</h1>
-    <p>V8: 分享协作</p>
+    <p>V9: 推送通知</p>
     <div class="auth-form">
       <input type="email" id="authEmail" placeholder="邮箱">
       <input type="password" id="authPassword" placeholder="密码">
@@ -784,14 +915,19 @@ function showApp() {
       <button onclick="exportData()" class="export-btn">📤 导出</button>
       <button onclick="importData()" class="import-btn">📥 导入</button>
       <button onclick="toggleStats()" class="stats-btn">📊 统计</button>
+      <button onclick="toggleNotifications()" id="notificationBtn" class="notification-btn ${notificationsEnabled ? 'enabled' : 'disabled'}">${notificationsEnabled ? '🔔 通知开' : '🔕 通知关'}</button>
     </div>
-  ` : `<div class="export-import-bar"><button onclick="toggleStats()" class="stats-btn">📊 统计</button></div>`;
+  ` : `
+    <div class="export-import-bar">
+      <button onclick="toggleStats()" class="stats-btn">📊 统计</button>
+    </div>
+  `;
   
   document.querySelector('header').innerHTML = `
     <h1>📝 Todo App</h1>
     <p>欢迎，${userEmail || '访客'}</p>
     ${authToken && !isSharedMode ? `<button onclick="logout()" class="logout-btn">退出登录</button>` : ''}
-    <p style="font-size: 12px; color: #888; margin-top: 5px;">🔗 V8: 分享协作</p>
+    <p style="font-size: 12px; color: #888; margin-top: 5px;">🔔 V9: 推送通知</p>
     ${shareHTML}
     ${searchHTML}
     ${exportHTML}
@@ -810,7 +946,6 @@ async function handleAuth(action) {
 // ==================== 初始化 ====================
 
 async function init() {
-  // 检查URL中是否有分享码
   const urlParams = new URLSearchParams(window.location.search);
   const shareCode = urlParams.get('share');
   
@@ -829,6 +964,13 @@ async function init() {
   } else {
     showLogin();
   }
+  
+  // 页面可见性变化时检查通知
+  document.addEventListener('visibilitychange', () => {
+    if (document.visibilityState === 'visible' && authToken) {
+      checkDueNotifications();
+    }
+  });
 }
 
 addBtn.addEventListener('click', addTodo);
@@ -853,6 +995,7 @@ window.showAddCategory = showAddCategory;
 window.exportData = exportData;
 window.importData = importData;
 window.toggleStats = toggleStats;
+window.toggleNotifications = toggleNotifications;
 window.createShare = createShare;
 window.joinShare = joinShare;
 window.exitShare = exitShare;
