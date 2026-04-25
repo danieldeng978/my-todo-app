@@ -350,6 +350,39 @@ button:hover {
   margin-right: 8px;
 }
 
+/* 日期显示 */
+.todo-date {
+  font-size: 11px;
+  padding: 3px 8px;
+  border-radius: 10px;
+  margin-right: 8px;
+  background: #f0f0f0;
+  color: #666;
+  cursor: pointer;
+}
+
+.todo-date.add-date {
+  background: transparent;
+  border: 1px dashed #ccc;
+  color: #999;
+}
+
+.todo-date.add-date:hover {
+  background: #667eea20;
+  color: #667eea;
+  border-color: #667eea;
+}
+
+/* 过期样式 */
+.todo-item.overdue {
+  background: #fff5f5;
+}
+
+.todo-item.overdue .todo-date {
+  background: #e74c3c;
+  color: white;
+}
+
 /* 登出按钮 */
 .logout-btn {
   background: #dc3545 !important;

@@ -1,5 +1,5 @@
-// public/app.js - Todo App V3: Tags/Labels + Priority Colors
-// 添加优先级标签功能
+// public/app.js - Todo App V4: Date/Reminder
+// 添加日期和提醒功能
 
 const DATABASE_URL = 'https://first-ad067-default-rtdb.asia-southeast1.firebasedatabase.app';
 
@@ -8,8 +8,8 @@ let currentUser = null;
 let authToken = localStorage.getItem('todo_auth_token');
 let userEmail = localStorage.getItem('todo_user_email');
 let currentCategory = 'all';
-let categories = [];
 let currentPriority = 'all';
+let categories = [];
 
 // 优先级定义
 const PRIORITIES = [
@@ -158,14 +158,21 @@ async function fetchTodos() {
   if (!authToken) return [];
   let todos = await fetchTodosRaw();
   
-  // 过滤
   if (currentCategory !== 'all') todos = todos.filter(t => t.category === currentCategory);
   if (currentPriority !== 'all') todos = todos.filter(t => t.priority === currentPriority);
   
-  todos.sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
+  todos.sort((a, b) => {
+    // 过期优先
+    if (a.dueDate && !b.dueDate) return -1;
+    if (!a.dueDate && b.dueDate) return 1;
+    if (a.dueDate && b.dueDate) {
+      if (a.dueDate !== b.dueDate) return new Date(a.dueDate) - new Date(b.dueDate);
+    }
+    return new Date(b.created_at) - new Date(a.created_at);
+  });
+  
   renderTodos(todos);
   
-  // 统计（不过滤）
   const allTodos = await fetchTodosRaw();
   updateStats(allTodos.filter(t => 
     (currentCategory === 'all' || t.category === currentCategory) &&
@@ -174,17 +181,22 @@ async function fetchTodos() {
   return todos;
 }
 
-async function addTodo(title) {
-  if (!title.trim()) return;
+async function addTodo() {
+  const title = todoInput.value.trim();
+  if (!title) { showMessage('请输入待办内容', 'error'); return; }
   if (!authToken) { showMessage('请先登录', 'error'); return; }
+  
+  // 弹出日期选择
+  const dueDate = prompt('设置截止日期（格式: 2024-12-31）\n直接回车跳过:', '');
   
   try {
     const newTodo = {
-      title: title.trim(),
+      title,
       completed: false,
       created_at: new Date().toISOString(),
       category: currentCategory === 'all' ? null : currentCategory,
-      priority: currentPriority === 'all' ? 'medium' : currentPriority
+      priority: currentPriority === 'all' ? 'medium' : currentPriority,
+      dueDate: dueDate ? dueDate : null
     };
     
     await fetch(`${DATABASE_URL}/${getUserPath()}.json`, {
@@ -194,8 +206,8 @@ async function addTodo(title) {
     });
     
     showMessage('添加成功！', 'success');
-    fetchTodos();
     todoInput.value = '';
+    fetchTodos();
   } catch (error) {
     showMessage(error.message, 'error');
   }
@@ -226,6 +238,30 @@ async function deleteTodo(id) {
   }
 }
 
+async function setDueDate(id, currentDate) {
+  const newDate = prompt('设置截止日期（格式: 2024-12-31）\n输入空值删除日期:', currentDate || '');
+  try {
+    if (newDate === '') {
+      await fetch(`${DATABASE_URL}/${getUserPath()}/${id}.json`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ dueDate: null })
+      });
+      showMessage('已删除日期', 'success');
+    } else if (newDate) {
+      await fetch(`${DATABASE_URL}/${getUserPath()}/${id}.json`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ dueDate: newDate })
+      });
+      showMessage('已设置日期', 'success');
+    }
+    fetchTodos();
+  } catch (error) {
+    showMessage(error.message, 'error');
+  }
+}
+
 // ==================== 渲染函数 ====================
 
 function renderTodos(todos) {
@@ -237,17 +273,32 @@ function renderTodos(todos) {
     return;
   }
   
+  const today = new Date().toISOString().split('T')[0];
+  
   todos.forEach(todo => {
     const cat = categories.find(c => c.id === todo.category);
     const priority = PRIORITIES.find(p => p.id === todo.priority) || PRIORITIES[1];
     
+    // 检查是否过期
+    let overdueClass = '';
+    let overdueText = '';
+    if (todo.dueDate && !todo.completed) {
+      if (todo.dueDate < today) {
+        overdueClass = 'overdue';
+        overdueText = '🔴 已过期';
+      } else if (todo.dueDate === today) {
+        overdueText = '🟡 今天';
+      }
+    }
+    
     const li = document.createElement('li');
-    li.className = `todo-item ${todo.completed ? 'completed' : ''}`;
+    li.className = `todo-item ${todo.completed ? 'completed' : ''} ${overdueClass}`;
     li.style.borderLeft = `4px solid ${priority.color}`;
     
     li.innerHTML = `
       <input type="checkbox" class="todo-checkbox" ${todo.completed ? 'checked' : ''} onchange="toggleTodo('${todo.id}')">
       <span class="todo-text">${escapeHtml(todo.title)}</span>
+      ${todo.dueDate ? `<span class="todo-date" onclick="setDueDate('${todo.id}', '${todo.dueDate}')">📅 ${todo.dueDate} ${overdueText}</span>` : `<span class="todo-date add-date" onclick="setDueDate('${todo.id}')">➕ 加日期</span>`}
       <span class="todo-priority" style="background:${priority.bgColor};color:${priority.color}">${priority.icon} ${priority.name}</span>
       ${cat ? `<span class="todo-category" style="background:${cat.color}20;color:${cat.color}">${cat.icon} ${cat.name}</span>` : ''}
       <button class="delete-btn" onclick="deleteTodo('${todo.id}')">删除</button>
@@ -292,11 +343,7 @@ function renderCategoryTabs() {
   tabs.innerHTML = `<div class="category-tab ${currentCategory === 'all' ? 'active' : ''}" onclick="switchCategory('all')">📋 全部</div>`;
   
   categories.forEach(cat => {
-    tabs.innerHTML += `
-      <div class="category-tab ${currentCategory === cat.id ? 'active' : ''}" onclick="switchCategory('${cat.id}')" style="${currentCategory === cat.id ? `background:${cat.color}20;border-color:${cat.color}` : ''}">
-        ${cat.icon} ${cat.name}
-        <span class="delete-cat" onclick="event.stopPropagation(); deleteCategory('${cat.id}')">×</span>
-      </div>`;
+    tabs.innerHTML += `<div class="category-tab ${currentCategory === cat.id ? 'active' : ''}" onclick="switchCategory('${cat.id}')" style="${currentCategory === cat.id ? `background:${cat.color}20;border-color:${cat.color}` : ''}">${cat.icon} ${cat.name}<span class="delete-cat" onclick="event.stopPropagation(); deleteCategory('${cat.id}')">×</span></div>`;
   });
   
   tabs.innerHTML += `<div class="category-tab add-cat" onclick="showAddCategory()">➕ 添加分类</div>`;
@@ -309,14 +356,10 @@ function renderPriorityTabs() {
   
   const tabs = document.createElement('div');
   tabs.className = 'priority-tabs';
-  
   tabs.innerHTML = `<div class="priority-tab ${currentPriority === 'all' ? 'active' : ''}" onclick="switchPriority('all')">🎯 全部</div>`;
   
   PRIORITIES.forEach(p => {
-    tabs.innerHTML += `
-      <div class="priority-tab ${currentPriority === p.id ? 'active' : ''}" onclick="switchPriority('${p.id}')" style="${currentPriority === p.id ? `background:${p.bgColor};border-color:${p.color};color:${p.color}` : ''}">
-        ${p.icon} ${p.name}
-      </div>`;
+    tabs.innerHTML += `<div class="priority-tab ${currentPriority === p.id ? 'active' : ''}" onclick="switchPriority('${p.id}')" style="${currentPriority === p.id ? `background:${p.bgColor};border-color:${p.color};color:${p.color}` : ''}">${p.icon} ${p.name}</div>`;
   });
   
   document.querySelector('.input-section').before(tabs);
@@ -347,7 +390,7 @@ function showAddCategory() {
 function showLogin() {
   document.querySelector('header').innerHTML = `
     <h1>📝 Todo App</h1>
-    <p>V3: 优先级标签</p>
+    <p>V4: 日期提醒</p>
     <div class="auth-form">
       <input type="email" id="authEmail" placeholder="邮箱">
       <input type="password" id="authPassword" placeholder="密码">
@@ -368,7 +411,7 @@ function showApp() {
     <h1>📝 Todo App</h1>
     <p>欢迎，${userEmail}</p>
     <button onclick="logout()" class="logout-btn">退出登录</button>
-    <p style="font-size: 12px; color: #888; margin-top: 5px;">🏷️ V3: 优先级标签</p>
+    <p style="font-size: 12px; color: #888; margin-top: 5px;">📅 V4: 日期提醒</p>
   `;
   loadCategories();
 }
@@ -383,12 +426,9 @@ async function handleAuth(action) {
 
 // ==================== 事件 ====================
 
-addBtn.addEventListener('click', () => {
-  if (todoInput.value.trim()) addTodo(todoInput.value);
-});
-
+addBtn.addEventListener('click', addTodo);
 todoInput.addEventListener('keypress', (e) => {
-  if (e.key === 'Enter' && todoInput.value.trim()) addTodo(todoInput.value);
+  if (e.key === 'Enter' && todoInput.value.trim()) addTodo();
 });
 
 document.addEventListener('DOMContentLoaded', () => {
@@ -402,6 +442,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
 window.toggleTodo = toggleTodo;
 window.deleteTodo = deleteTodo;
+window.setDueDate = setDueDate;
 window.handleAuth = handleAuth;
 window.logout = logout;
 window.switchCategory = switchCategory;
