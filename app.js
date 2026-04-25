@@ -369,6 +369,12 @@ function showMessage(text, type) {
   setTimeout(() => { messageEl.textContent = ''; messageEl.className = 'message'; }, 3000);
 }
 
+// 网络错误处理
+function handleNetworkError(error) {
+  console.error('Network error:', error);
+  showMessage('网络连接失败，请检查网络后刷新重试', 'error');
+}
+
 function escapeHtml(text) {
   const div = document.createElement('div');
   div.textContent = text;
