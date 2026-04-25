@@ -1,5 +1,5 @@
-// public/app.js - Todo App V7: Statistics/Stats Dashboard
-// 添加统计图表功能
+// public/app.js - Todo App V8: Share/Collaboration
+// 添加分享/协作功能
 
 const DATABASE_URL = 'https://first-ad067-default-rtdb.asia-southeast1.firebasedatabase.app';
 
@@ -12,6 +12,8 @@ let currentPriority = 'all';
 let searchQuery = '';
 let categories = [];
 let showStats = false;
+let currentShareCode = localStorage.getItem('todo_share_code');
+let isSharedMode = false;
 
 // 优先级
 const PRIORITIES = [
@@ -43,6 +45,10 @@ function hashPassword(password) {
 
 function generateUserId() {
   return 'user_' + Date.now().toString(36) + Math.random().toString(36).substr(2, 9);
+}
+
+function generateShareCode() {
+  return Math.random().toString(36).substring(2, 8).toUpperCase();
 }
 
 function escapeHtml(text) {
@@ -96,6 +102,9 @@ async function login(email, password) {
     userEmail = email;
     localStorage.setItem('todo_auth_token', authToken);
     localStorage.setItem('todo_user_email', email);
+    isSharedMode = false;
+    currentShareCode = null;
+    localStorage.removeItem('todo_share_code');
     showApp();
     showMessage(`欢迎回来，${email}！`, 'success');
   } catch (error) {
@@ -109,21 +118,121 @@ function logout() {
   userEmail = null;
   localStorage.removeItem('todo_auth_token');
   localStorage.removeItem('todo_user_email');
+  isSharedMode = false;
+  currentShareCode = null;
+  localStorage.removeItem('todo_share_code');
   showLogin();
   showMessage('已退出登录', 'success');
 }
 
 // ==================== 路径 ====================
 
-function getUserPath() { return authToken ? `todos_${authToken}` : null; }
-function getCategoriesPath() { return authToken ? `categories_${authToken}` : null; }
+function getUserPath() { 
+  if (isSharedMode && currentShareCode) {
+    return `shared_${currentShareCode}`;
+  }
+  return authToken ? `todos_${authToken}` : null; 
+}
+
+function getCategoriesPath() { 
+  if (isSharedMode && currentShareCode) {
+    return `shared_cat_${currentShareCode}`;
+  }
+  return authToken ? `categories_${authToken}` : null; 
+}
+
+// ==================== 分享系统 ====================
+
+async function createShare() {
+  if (!authToken) { showMessage('请先登录', 'error'); return; }
+  
+  try {
+    const shareCode = generateShareCode();
+    
+    // 创建分享数据存储
+    await fetch(`${DATABASE_URL}/shared_${shareCode}.json`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ todos: [], created: new Date().toISOString(), owner: authToken })
+    });
+    
+    // 复制当前分类
+    const cats = await fetchCategories();
+    for (const cat of cats) {
+      await fetch(`${DATABASE_URL}/shared_cat_${shareCode}/${cat.id}.json`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(cat)
+      });
+    }
+    
+    // 复制当前待办
+    const todos = await fetchTodosRaw();
+    for (const todo of todos) {
+      const newTodo = { ...todo };
+      delete newTodo.id;
+      await fetch(`${DATABASE_URL}/shared_${shareCode}/todos.json`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(newTodo)
+      });
+    }
+    
+    currentShareCode = shareCode;
+    isSharedMode = true;
+    localStorage.setItem('todo_share_code', shareCode);
+    
+    // 显示分享码
+    const shareUrl = `https://danieldeng978.github.io/my-todo-app/?share=${shareCode}`;
+    
+    if (confirm(`分享码: ${shareCode}\n\n链接: ${shareUrl}\n\n是否复制链接?`)) {
+      navigator.clipboard.writeText(shareUrl);
+      showMessage('链接已复制!', 'success');
+    }
+    
+    showApp();
+  } catch (error) {
+    showMessage('创建分享失败', 'error');
+  }
+}
+
+async function joinShare() {
+  const shareCode = prompt('输入分享码:');
+  if (!shareCode || !shareCode.trim()) return;
+  
+  const code = shareCode.trim().toUpperCase();
+  
+  try {
+    // 检查分享是否存在
+    const response = await fetch(`${DATABASE_URL}/shared_${code}.json`);
+    if (!response.ok) throw new Error('分享不存在');
+    
+    currentShareCode = code;
+    isSharedMode = true;
+    localStorage.setItem('todo_share_code', code);
+    
+    showMessage('已加入分享列表!', 'success');
+    showApp();
+  } catch (error) {
+    showMessage('分享码无效', 'error');
+  }
+}
+
+async function exitShare() {
+  isSharedMode = false;
+  currentShareCode = null;
+  localStorage.removeItem('todo_share_code');
+  showMessage('已退出分享模式', 'success');
+  showApp();
+}
 
 // ==================== 分类系统 ====================
 
 async function fetchCategories() {
-  if (!authToken) return [];
+  const path = getCategoriesPath();
+  if (!path) return [];
   try {
-    const response = await fetch(`${DATABASE_URL}/${getCategoriesPath()}.json`);
+    const response = await fetch(`${DATABASE_URL}/${path}.json`);
     const data = await response.json();
     categories = data ? Object.entries(data).map(([id, cat]) => ({ id, ...cat })) : [];
     return categories;
@@ -134,9 +243,10 @@ async function fetchCategories() {
 }
 
 async function addCategory(name, icon = '📁', color = '#667eea') {
-  if (!authToken) return;
+  const path = getCategoriesPath();
+  if (!path) return;
   const id = 'cat_' + Date.now().toString(36);
-  await fetch(`${DATABASE_URL}/${getCategoriesPath()}/${id}.json`, {
+  await fetch(`${DATABASE_URL}/${path}/${id}.json`, {
     method: 'PUT',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ name, icon, color })
@@ -145,7 +255,7 @@ async function addCategory(name, icon = '📁', color = '#667eea') {
 }
 
 async function deleteCategory(catId) {
-  if (!authToken || catId === 'all') return;
+  if (!authToken || catId === 'all' || isSharedMode) return;
   const todos = await fetchTodosRaw();
   for (const todo of todos) {
     if (todo.category === catId) {
@@ -160,14 +270,19 @@ async function deleteCategory(catId) {
 // ==================== Todo CRUD ====================
 
 async function fetchTodosRaw() {
-  if (!authToken) return [];
-  const response = await fetch(`${DATABASE_URL}/${getUserPath()}.json`);
+  const path = getUserPath();
+  if (!path) return [];
+  const response = await fetch(`${DATABASE_URL}/${path}.json`);
   const data = await response.json();
+  if (isSharedMode) {
+    return data && data.todos ? Object.entries(data.todos).map(([id, todo]) => ({ id, ...todo })) : [];
+  }
   return data ? Object.entries(data).map(([id, todo]) => ({ id, ...todo })) : [];
 }
 
 async function fetchTodos() {
-  if (!authToken) return [];
+  const path = getUserPath();
+  if (!path) return [];
   let todos = await fetchTodosRaw();
   
   if (searchQuery) {
@@ -200,7 +315,7 @@ async function fetchTodos() {
 async function addTodo() {
   const title = todoInput.value.trim();
   if (!title) { showMessage('请输入待办内容', 'error'); return; }
-  if (!authToken) { showMessage('请先登录', 'error'); return; }
+  if (!authToken && !isSharedMode) { showMessage('请先登录', 'error'); return; }
   
   const dueDate = prompt('设置截止日期（格式: 2024-12-31）\n直接回车跳过:', '');
   
@@ -214,13 +329,21 @@ async function addTodo() {
       dueDate: dueDate ? dueDate : null
     };
     
-    await fetch(`${DATABASE_URL}/${getUserPath()}.json`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(newTodo)
-    });
+    if (isSharedMode) {
+      await fetch(`${DATABASE_URL}/${getUserPath()}/todos.json`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(newTodo)
+      });
+    } else {
+      await fetch(`${DATABASE_URL}/${getUserPath()}.json`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(newTodo)
+      });
+    }
     
-    showMessage('添加成功！', 'success');
+    showMessage('添加成功!', 'success');
     todoInput.value = '';
     fetchTodos();
   } catch (error) {
@@ -230,9 +353,16 @@ async function addTodo() {
 
 async function toggleTodo(id) {
   try {
-    const getResponse = await fetch(`${DATABASE_URL}/${getUserPath()}/${id}.json`);
+    let url = `${DATABASE_URL}/${getUserPath()}`;
+    if (isSharedMode) {
+      url += `/todos/${id}`;
+    } else {
+      url += `/${id}`;
+    }
+    const getResponse = await fetch(url + '.json');
     const todo = await getResponse.json();
-    await fetch(`${DATABASE_URL}/${getUserPath()}/${id}.json`, {
+    
+    await fetch(url, {
       method: 'PATCH',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ completed: !todo.completed })
@@ -244,9 +374,13 @@ async function toggleTodo(id) {
 }
 
 async function deleteTodo(id) {
+  if (isSharedMode) {
+    showMessage('分享模式只读,不能删除', 'error');
+    return;
+  }
   try {
     await fetch(`${DATABASE_URL}/${getUserPath()}/${id}.json`, { method: 'DELETE' });
-    showMessage('删除成功！', 'success');
+    showMessage('删除成功!', 'success');
     fetchTodos();
   } catch (error) {
     showMessage(error.message, 'error');
@@ -256,15 +390,22 @@ async function deleteTodo(id) {
 async function setDueDate(id, currentDate) {
   const newDate = prompt('设置截止日期（格式: 2024-12-31）\n输入空值删除日期:', currentDate || '');
   try {
+    let url = `${DATABASE_URL}/${getUserPath()}`;
+    if (isSharedMode) {
+      url += `/todos/${id}`;
+    } else {
+      url += `/${id}`;
+    }
+    
     if (newDate === '') {
-      await fetch(`${DATABASE_URL}/${getUserPath()}/${id}.json`, {
+      await fetch(url, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ dueDate: null })
       });
       showMessage('已删除日期', 'success');
     } else if (newDate) {
-      await fetch(`${DATABASE_URL}/${getUserPath()}/${id}.json`, {
+      await fetch(url, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ dueDate: newDate })
@@ -339,76 +480,29 @@ async function renderStats() {
     </div>
     
     <div class="stats-grid">
-      <div class="stat-card total">
-        <div class="stat-number">${stats.total}</div>
-        <div class="stat-label">总计</div>
-      </div>
-      <div class="stat-card completed">
-        <div class="stat-number">${stats.completed}</div>
-        <div class="stat-label">已完成</div>
-      </div>
-      <div class="stat-card pending">
-        <div class="stat-number">${stats.pending}</div>
-        <div class="stat-label">进行中</div>
-      </div>
-      <div class="stat-card overdue">
-        <div class="stat-number">${stats.overdue}</div>
-        <div class="stat-label">已过期</div>
-      </div>
+      <div class="stat-card total"><div class="stat-number">${stats.total}</div><div class="stat-label">总计</div></div>
+      <div class="stat-card completed"><div class="stat-number">${stats.completed}</div><div class="stat-label">已完成</div></div>
+      <div class="stat-card pending"><div class="stat-number">${stats.pending}</div><div class="stat-label">进行中</div></div>
+      <div class="stat-card overdue"><div class="stat-number">${stats.overdue}</div><div class="stat-label">已过期</div></div>
     </div>
     
     <div class="stats-section">
       <h4>🔴 按优先级</h4>
       <div class="priority-bars">
-        <div class="bar-row">
-          <span class="bar-label">🔴 紧急</span>
-          <div class="bar-bg"><div class="bar-fill high" style="width:${stats.total ? (stats.byPriority.high / stats.total * 100) : 0}%"></div></div>
-          <span class="bar-count">${stats.byPriority.high}</span>
-        </div>
-        <div class="bar-row">
-          <span class="bar-label">🟡 重要</span>
-          <div class="bar-bg"><div class="bar-fill medium" style="width:${stats.total ? (stats.byPriority.medium / stats.total * 100) : 0}%"></div></div>
-          <span class="bar-count">${stats.byPriority.medium}</span>
-        </div>
-        <div class="bar-row">
-          <span class="bar-label">🟢 一般</span>
-          <div class="bar-bg"><div class="bar-fill low" style="width:${stats.total ? (stats.byPriority.low / stats.total * 100) : 0}%"></div></div>
-          <span class="bar-count">${stats.byPriority.low}</span>
-        </div>
+        <div class="bar-row"><span class="bar-label">🔴 紧急</span><div class="bar-bg"><div class="bar-fill high" style="width:${stats.total ? (stats.byPriority.high / stats.total * 100) : 0}%"></div></div><span class="bar-count">${stats.byPriority.high}</span></div>
+        <div class="bar-row"><span class="bar-label">🟡 重要</span><div class="bar-bg"><div class="bar-fill medium" style="width:${stats.total ? (stats.byPriority.medium / stats.total * 100) : 0}%"></div></div><span class="bar-count">${stats.byPriority.medium}</span></div>
+        <div class="bar-row"><span class="bar-label">🟢 一般</span><div class="bar-bg"><div class="bar-fill low" style="width:${stats.total ? (stats.byPriority.low / stats.total * 100) : 0}%"></div></div><span class="bar-count">${stats.byPriority.low}</span></div>
       </div>
     </div>
     
     <div class="stats-section">
       <h4>📅 时间提醒</h4>
       <div class="time-alerts">
-        <div class="alert-item overdue">
-          <span>🔴 已过期</span>
-          <strong>${stats.overdue}</strong>
-        </div>
-        <div class="alert-item today">
-          <span>🟡 今天到期</span>
-          <strong>${stats.dueToday}</strong>
-        </div>
-        <div class="alert-item week">
-          <span>📆 本周到期</span>
-          <strong>${stats.dueThisWeek}</strong>
-        </div>
+        <div class="alert-item overdue"><span>🔴 已过期</span><strong>${stats.overdue}</strong></div>
+        <div class="alert-item today"><span>🟡 今天到期</span><strong>${stats.dueToday}</strong></div>
+        <div class="alert-item week"><span>📆 本周到期</span><strong>${stats.dueThisWeek}</strong></div>
       </div>
     </div>
-    
-    ${categories.length > 0 ? `
-    <div class="stats-section">
-      <h4>📁 按分类</h4>
-      <div class="category-list">
-        ${categories.map(cat => `
-          <div class="category-stat">
-            <span style="color:${cat.color}">${cat.icon} ${cat.name}</span>
-            <strong>${stats.byCategory[cat.id] || 0}</strong>
-          </div>
-        `).join('')}
-      </div>
-    </div>
-    ` : ''}
   `;
   
   document.querySelector('.container').prepend(dashboard);
@@ -422,12 +516,12 @@ function hideStats() {
 // ==================== 导出/导入 ====================
 
 async function exportData() {
-  if (!authToken) return;
+  if (!authToken || isSharedMode) return;
   try {
     const todos = await fetchTodosRaw();
     const cats = await fetchCategories();
     const exportData = {
-      version: 'V7',
+      version: 'V8',
       exportDate: new Date().toISOString(),
       userEmail: userEmail,
       todos: todos,
@@ -447,7 +541,7 @@ async function exportData() {
 }
 
 async function importData() {
-  if (!authToken) return;
+  if (!authToken || isSharedMode) return;
   const input = document.createElement('input');
   input.type = 'file';
   input.accept = '.json';
@@ -458,7 +552,7 @@ async function importData() {
       const text = await file.text();
       const data = JSON.parse(text);
       if (!data.todos || !Array.isArray(data.todos)) throw new Error('文件格式不正确');
-      const overwrite = confirm(`将导入 ${data.todos.length} 条待办\n\n"确定"覆盖，"取消"追加`);
+      const overwrite = confirm(`将导入 ${data.todos.length} 条待办\n\n"确定"覆盖,"取消"追加`);
       if (overwrite) {
         const existingTodos = await fetchTodosRaw();
         for (const todo of existingTodos) {
@@ -492,30 +586,6 @@ async function importData() {
   input.click();
 }
 
-async function clearAllData() {
-  if (!authToken) return;
-  const confirmText = prompt('危险操作！\n\n输入"删除"确认清空所有数据:');
-  if (confirmText !== '删除') {
-    showMessage('已取消', 'error');
-    return;
-  }
-  try {
-    const todos = await fetchTodosRaw();
-    for (const todo of todos) {
-      await fetch(`${DATABASE_URL}/${getUserPath()}/${todo.id}.json`, { method: 'DELETE' });
-    }
-    const cats = await fetchCategories();
-    for (const cat of cats) {
-      await fetch(`${DATABASE_URL}/${getCategoriesPath()}/${cat.id}.json`, { method: 'DELETE' });
-    }
-    showMessage('已清空所有数据', 'success');
-    loadCategories();
-    fetchTodos();
-  } catch (error) {
-    showMessage('清空失败', 'error');
-  }
-}
-
 // ==================== 搜索 ====================
 
 function performSearch(query) {
@@ -547,7 +617,7 @@ function clearSearch() {
 
 function renderTodos(todos) {
   todoList.innerHTML = '';
-  if (!authToken) return;
+  if (!authToken && !isSharedMode) return;
   
   if (todos.length === 0) {
     todoList.innerHTML = `<li class="empty-state"><span>📋</span><p>${searchQuery ? '未找到匹配的待办' : '暂无待办'}</p></li>`;
@@ -581,7 +651,7 @@ function renderTodos(todos) {
       ${todo.dueDate ? `<span class="todo-date" onclick="setDueDate('${todo.id}', '${todo.dueDate}')">📅 ${todo.dueDate} ${overdueText}</span>` : `<span class="todo-date add-date" onclick="setDueDate('${todo.id}')">➕ 加日期</span>`}
       <span class="todo-priority" style="background:${priority.bgColor};color:${priority.color}">${priority.icon} ${priority.name}</span>
       ${cat ? `<span class="todo-category" style="background:${cat.color}20;color:${cat.color}">${cat.icon} ${cat.name}</span>` : ''}
-      <button class="delete-btn" onclick="deleteTodo('${todo.id}')">删除</button>
+      ${!isSharedMode ? `<button class="delete-btn" onclick="deleteTodo('${todo.id}')">删除</button>` : ''}
     `;
     todoList.appendChild(li);
   });
@@ -624,10 +694,12 @@ function renderCategoryTabs() {
   tabs.innerHTML = `<div class="category-tab ${currentCategory === 'all' ? 'active' : ''}" onclick="switchCategory('all')">📋 全部</div>`;
   
   categories.forEach(cat => {
-    tabs.innerHTML += `<div class="category-tab ${currentCategory === cat.id ? 'active' : ''}" onclick="switchCategory('${cat.id}')" style="${currentCategory === cat.id ? `background:${cat.color}20;border-color:${cat.color}` : ''}">${cat.icon} ${cat.name}<span class="delete-cat" onclick="event.stopPropagation(); deleteCategory('${cat.id}')">×</span></div>`;
+    tabs.innerHTML += `<div class="category-tab ${currentCategory === cat.id ? 'active' : ''}" onclick="switchCategory('${cat.id}')" style="${currentCategory === cat.id ? `background:${cat.color}20;border-color:${cat.color}` : ''}">${cat.icon} ${cat.name}${!isSharedMode ? `<span class="delete-cat" onclick="event.stopPropagation(); deleteCategory('${cat.id}')">×</span>` : ''}</div>`;
   });
   
-  tabs.innerHTML += `<div class="category-tab add-cat" onclick="showAddCategory()">➕ 添加分类</div>`;
+  if (!isSharedMode) {
+    tabs.innerHTML += `<div class="category-tab add-cat" onclick="showAddCategory()">➕ 添加分类</div>`;
+  }
   document.querySelector('.input-section').before(tabs);
 }
 
@@ -671,7 +743,7 @@ function showAddCategory() {
 function showLogin() {
   document.querySelector('header').innerHTML = `
     <h1>📝 Todo App</h1>
-    <p>V7: 统计图表</p>
+    <p>V8: 分享协作</p>
     <div class="auth-form">
       <input type="email" id="authEmail" placeholder="邮箱">
       <input type="password" id="authPassword" placeholder="密码">
@@ -689,19 +761,38 @@ function showLogin() {
 
 function showApp() {
   const searchHTML = `<div class="search-box"><input type="text" id="searchInput" placeholder="🔍 搜索待办..." oninput="performSearch(this.value)"></div>`;
-  const exportHTML = `
+  
+  let shareHTML = '';
+  if (isSharedMode) {
+    shareHTML = `
+      <div class="share-mode-banner">
+        <span>🤝 分享模式: ${currentShareCode}</span>
+        <button onclick="exitShare()" class="exit-share-btn">退出</button>
+      </div>
+    `;
+  } else if (authToken) {
+    shareHTML = `
+      <div class="share-bar">
+        <button onclick="createShare()" class="share-btn">🔗 创建分享</button>
+        <button onclick="joinShare()" class="join-btn">🤝 加入分享</button>
+      </div>
+    `;
+  }
+  
+  const exportHTML = !isSharedMode ? `
     <div class="export-import-bar">
       <button onclick="exportData()" class="export-btn">📤 导出</button>
       <button onclick="importData()" class="import-btn">📥 导入</button>
       <button onclick="toggleStats()" class="stats-btn">📊 统计</button>
     </div>
-  `;
+  ` : `<div class="export-import-bar"><button onclick="toggleStats()" class="stats-btn">📊 统计</button></div>`;
   
   document.querySelector('header').innerHTML = `
     <h1>📝 Todo App</h1>
-    <p>欢迎，${userEmail}</p>
-    <button onclick="logout()" class="logout-btn">退出登录</button>
-    <p style="font-size: 12px; color: #888; margin-top: 5px;">📊 V7: 统计图表</p>
+    <p>欢迎，${userEmail || '访客'}</p>
+    ${authToken && !isSharedMode ? `<button onclick="logout()" class="logout-btn">退出登录</button>` : ''}
+    <p style="font-size: 12px; color: #888; margin-top: 5px;">🔗 V8: 分享协作</p>
+    ${shareHTML}
     ${searchHTML}
     ${exportHTML}
   `;
@@ -716,21 +807,36 @@ async function handleAuth(action) {
   else await register(email, password);
 }
 
-// ==================== 事件 ====================
+// ==================== 初始化 ====================
+
+async function init() {
+  // 检查URL中是否有分享码
+  const urlParams = new URLSearchParams(window.location.search);
+  const shareCode = urlParams.get('share');
+  
+  if (shareCode) {
+    currentShareCode = shareCode.toUpperCase();
+    isSharedMode = true;
+    localStorage.setItem('todo_share_code', currentShareCode);
+    showMessage('已加入分享!', 'success');
+  }
+  
+  if (authToken && userEmail) {
+    currentUser = { id: authToken, email: userEmail };
+    showApp();
+  } else if (currentShareCode) {
+    showApp();
+  } else {
+    showLogin();
+  }
+}
 
 addBtn.addEventListener('click', addTodo);
 todoInput.addEventListener('keypress', (e) => {
   if (e.key === 'Enter' && todoInput.value.trim()) addTodo();
 });
 
-document.addEventListener('DOMContentLoaded', () => {
-  if (authToken && userEmail) {
-    currentUser = { id: authToken, email: userEmail };
-    showApp();
-  } else {
-    showLogin();
-  }
-});
+document.addEventListener('DOMContentLoaded', init);
 
 // 全局函数
 window.toggleTodo = toggleTodo;
@@ -746,5 +852,7 @@ window.deleteCategory = deleteCategory;
 window.showAddCategory = showAddCategory;
 window.exportData = exportData;
 window.importData = importData;
-window.clearAllData = clearAllData;
 window.toggleStats = toggleStats;
+window.createShare = createShare;
+window.joinShare = joinShare;
+window.exitShare = exitShare;

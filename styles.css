@@ -644,6 +644,68 @@ button:hover {
   gap: 8px;
 }
 
+/* 分享模式 */
+.share-bar {
+  display: flex;
+  gap: 8px;
+  margin-top: 10px;
+  margin-bottom: 10px;
+}
+
+.share-btn, .join-btn {
+  flex: 1;
+  padding: 10px;
+  border: none;
+  border-radius: 8px;
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+}
+
+.share-btn {
+  background: #667eea;
+  color: white;
+}
+
+.share-btn:hover {
+  background: #5a6fd6;
+}
+
+.join-btn {
+  background: #27ae60;
+  color: white;
+}
+
+.join-btn:hover {
+  background: #219a52;
+}
+
+.share-mode-banner {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 12px 15px;
+  background: linear-gradient(135deg, #667eea, #764ba2);
+  color: white;
+  border-radius: 10px;
+  margin-bottom: 15px;
+  font-weight: 500;
+}
+
+.share-mode-banner span {
+  font-size: 14px;
+}
+
+.exit-share-btn {
+  background: rgba(255,255,255,0.2);
+  color: white;
+  border: 1px solid rgba(255,255,255,0.3);
+  padding: 6px 12px;
+  border-radius: 15px;
+  font-size: 12px;
+  cursor: pointer;
+}
+
 /* 登出按钮 */
 .logout-btn {
   background: #dc3545 !important;
