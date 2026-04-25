@@ -1,5 +1,5 @@
-// public/app.js - Todo App V2: Categories/Folders
-// 添加分类/文件夹功能
+// public/app.js - Todo App V3: Tags/Labels + Priority Colors
+// 添加优先级标签功能
 
 const DATABASE_URL = 'https://first-ad067-default-rtdb.asia-southeast1.firebasedatabase.app';
 
@@ -7,8 +7,16 @@ const DATABASE_URL = 'https://first-ad067-default-rtdb.asia-southeast1.firebased
 let currentUser = null;
 let authToken = localStorage.getItem('todo_auth_token');
 let userEmail = localStorage.getItem('todo_user_email');
-let currentCategory = 'all'; // 当前分类
-let categories = []; // 用户分类列表
+let currentCategory = 'all';
+let categories = [];
+let currentPriority = 'all';
+
+// 优先级定义
+const PRIORITIES = [
+  { id: 'high', name: '紧急', icon: '🔴', color: '#e74c3c', bgColor: '#fdeaea' },
+  { id: 'medium', name: '重要', icon: '🟡', color: '#f39c12', bgColor: '#fef9e7' },
+  { id: 'low', name: '一般', icon: '🟢', color: '#27ae60', bgColor: '#eafaf1' }
+];
 
 // DOM 元素
 const todoInput = document.getElementById('todoInput');
@@ -41,19 +49,16 @@ async function register(email, password) {
   try {
     const checkResponse = await fetch(`${DATABASE_URL}/users.json`);
     const usersData = await checkResponse.json();
-    
     if (usersData) {
       const existingUser = Object.values(usersData).find(u => u.email === email);
       if (existingUser) throw new Error('该邮箱已注册');
     }
-    
     const userId = generateUserId();
     await fetch(`${DATABASE_URL}/users/${userId}.json`, {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ email, passwordHash: hashPassword(password), created: new Date().toISOString() })
     });
-    
     login(email, password);
   } catch (error) {
     showMessage(error.message, 'error');
@@ -64,10 +69,8 @@ async function login(email, password) {
   try {
     const response = await fetch(`${DATABASE_URL}/users.json`);
     const usersData = await response.json();
-    
     let foundUser = null;
     let foundUserId = null;
-    
     for (const [userId, user] of Object.entries(usersData || {})) {
       if (user.email === email && user.passwordHash === hashPassword(password)) {
         foundUser = user;
@@ -75,15 +78,12 @@ async function login(email, password) {
         break;
       }
     }
-    
     if (!foundUser) throw new Error('邮箱或密码错误');
-    
     currentUser = { id: foundUserId, email: foundUser.email };
     authToken = foundUserId;
     userEmail = email;
     localStorage.setItem('todo_auth_token', authToken);
     localStorage.setItem('todo_user_email', email);
-    
     showApp();
     showMessage(`欢迎回来，${email}！`, 'success');
   } catch (error) {
@@ -101,31 +101,19 @@ function logout() {
   showMessage('已退出登录', 'success');
 }
 
+// ==================== 路径 ====================
+
+function getUserPath() { return authToken ? `todos_${authToken}` : null; }
+function getCategoriesPath() { return authToken ? `categories_${authToken}` : null; }
+
 // ==================== 分类系统 ====================
 
-function getUserPath() {
-  return authToken ? `todos_${authToken}` : null;
-}
-
-function getCategoriesPath() {
-  return authToken ? `categories_${authToken}` : null;
-}
-
-// 获取分类
 async function fetchCategories() {
   if (!authToken) return [];
   try {
     const response = await fetch(`${DATABASE_URL}/${getCategoriesPath()}.json`);
     const data = await response.json();
-    if (data) {
-      categories = Object.entries(data).map(([id, cat]) => ({ id, ...cat }));
-    } else {
-      categories = [
-        { id: 'work', name: '工作', icon: '💼', color: '#e74c3c' },
-        { id: 'life', name: '生活', icon: '🏠', color: '#3498db' },
-        { id: 'study', name: '学习', icon: '📚', color: '#27ae60' }
-      ];
-    }
+    categories = data ? Object.entries(data).map(([id, cat]) => ({ id, ...cat })) : [];
     return categories;
   } catch (error) {
     categories = [];
@@ -133,7 +121,6 @@ async function fetchCategories() {
   }
 }
 
-// 添加分类
 async function addCategory(name, icon = '📁', color = '#667eea') {
   if (!authToken) return;
   const id = 'cat_' + Date.now().toString(36);
@@ -145,19 +132,14 @@ async function addCategory(name, icon = '📁', color = '#667eea') {
   await loadCategories();
 }
 
-// 删除分类
 async function deleteCategory(catId) {
   if (!authToken || catId === 'all') return;
-  
-  // 删除该分类下的所有待办
-  const todos = await fetchTodos();
+  const todos = await fetchTodosRaw();
   for (const todo of todos) {
     if (todo.category === catId) {
       await fetch(`${DATABASE_URL}/${getUserPath()}/${todo.id}.json`, { method: 'DELETE' });
     }
   }
-  
-  // 删除分类
   await fetch(`${DATABASE_URL}/${getCategoriesPath()}/${catId}.json`, { method: 'DELETE' });
   currentCategory = 'all';
   await loadCategories();
@@ -165,26 +147,31 @@ async function deleteCategory(catId) {
 
 // ==================== Todo CRUD ====================
 
+async function fetchTodosRaw() {
+  if (!authToken) return [];
+  const response = await fetch(`${DATABASE_URL}/${getUserPath()}.json`);
+  const data = await response.json();
+  return data ? Object.entries(data).map(([id, todo]) => ({ id, ...todo })) : [];
+}
+
 async function fetchTodos() {
   if (!authToken) return [];
-  try {
-    const path = getUserPath();
-    const response = await fetch(`${DATABASE_URL}/${path}.json`);
-    const data = await response.json();
-    let todos = data ? Object.entries(data).map(([id, todo]) => ({ id, ...todo })) : [];
-    
-    // 过滤当前分类
-    if (currentCategory !== 'all') {
-      todos = todos.filter(t => t.category === currentCategory);
-    }
-    
-    todos.sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
-    renderTodos(todos);
-    updateStats(todos.filter(t => t.category === currentCategory || currentCategory === 'all'));
-    return todos;
-  } catch (error) {
-    return [];
-  }
+  let todos = await fetchTodosRaw();
+  
+  // 过滤
+  if (currentCategory !== 'all') todos = todos.filter(t => t.category === currentCategory);
+  if (currentPriority !== 'all') todos = todos.filter(t => t.priority === currentPriority);
+  
+  todos.sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
+  renderTodos(todos);
+  
+  // 统计（不过滤）
+  const allTodos = await fetchTodosRaw();
+  updateStats(allTodos.filter(t => 
+    (currentCategory === 'all' || t.category === currentCategory) &&
+    (currentPriority === 'all' || t.priority === currentPriority)
+  ));
+  return todos;
 }
 
 async function addTodo(title) {
@@ -192,15 +179,15 @@ async function addTodo(title) {
   if (!authToken) { showMessage('请先登录', 'error'); return; }
   
   try {
-    const path = getUserPath();
     const newTodo = {
       title: title.trim(),
       completed: false,
       created_at: new Date().toISOString(),
-      category: currentCategory === 'all' ? null : currentCategory
+      category: currentCategory === 'all' ? null : currentCategory,
+      priority: currentPriority === 'all' ? 'medium' : currentPriority
     };
     
-    await fetch(`${DATABASE_URL}/${path}.json`, {
+    await fetch(`${DATABASE_URL}/${getUserPath()}.json`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(newTodo)
@@ -216,16 +203,13 @@ async function addTodo(title) {
 
 async function toggleTodo(id) {
   try {
-    const path = getUserPath();
-    const getResponse = await fetch(`${DATABASE_URL}/${path}/${id}.json`);
+    const getResponse = await fetch(`${DATABASE_URL}/${getUserPath()}/${id}.json`);
     const todo = await getResponse.json();
-    
-    await fetch(`${DATABASE_URL}/${path}/${id}.json`, {
+    await fetch(`${DATABASE_URL}/${getUserPath()}/${id}.json`, {
       method: 'PATCH',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ completed: !todo.completed })
     });
-    
     fetchTodos();
   } catch (error) {
     showMessage(error.message, 'error');
@@ -234,8 +218,7 @@ async function toggleTodo(id) {
 
 async function deleteTodo(id) {
   try {
-    const path = getUserPath();
-    await fetch(`${DATABASE_URL}/${path}/${id}.json`, { method: 'DELETE' });
+    await fetch(`${DATABASE_URL}/${getUserPath()}/${id}.json`, { method: 'DELETE' });
     showMessage('删除成功！', 'success');
     fetchTodos();
   } catch (error) {
@@ -247,27 +230,26 @@ async function deleteTodo(id) {
 
 function renderTodos(todos) {
   todoList.innerHTML = '';
-  
   if (!authToken) return;
   
   if (todos.length === 0) {
-    todoList.innerHTML = `
-      <li class="empty-state">
-        <span>📋</span>
-        <p>暂无待办，添加一个吧！</p>
-      </li>
-    `;
+    todoList.innerHTML = `<li class="empty-state"><span>📋</span><p>暂无待办</p></li>`;
     return;
   }
   
   todos.forEach(todo => {
     const cat = categories.find(c => c.id === todo.category);
+    const priority = PRIORITIES.find(p => p.id === todo.priority) || PRIORITIES[1];
+    
     const li = document.createElement('li');
     li.className = `todo-item ${todo.completed ? 'completed' : ''}`;
+    li.style.borderLeft = `4px solid ${priority.color}`;
+    
     li.innerHTML = `
       <input type="checkbox" class="todo-checkbox" ${todo.completed ? 'checked' : ''} onchange="toggleTodo('${todo.id}')">
       <span class="todo-text">${escapeHtml(todo.title)}</span>
-      ${cat ? `<span class="todo-category" style="background:${cat.color}20;color:${cat.color};border:1px solid ${cat.color}">${cat.icon} ${cat.name}</span>` : ''}
+      <span class="todo-priority" style="background:${priority.bgColor};color:${priority.color}">${priority.icon} ${priority.name}</span>
+      ${cat ? `<span class="todo-category" style="background:${cat.color}20;color:${cat.color}">${cat.icon} ${cat.name}</span>` : ''}
       <button class="delete-btn" onclick="deleteTodo('${todo.id}')">删除</button>
     `;
     todoList.appendChild(li);
@@ -275,11 +257,9 @@ function renderTodos(todos) {
 }
 
 function updateStats(todos) {
-  const total = todos.length;
-  const completed = todos.filter(t => t.completed).length;
-  totalCount.textContent = total;
-  completedCount.textContent = completed;
-  pendingCount.textContent = total - completed;
+  totalCount.textContent = todos.length;
+  completedCount.textContent = todos.filter(t => t.completed).length;
+  pendingCount.textContent = todos.filter(t => !t.completed).length;
 }
 
 function showMessage(text, type) {
@@ -294,77 +274,80 @@ function escapeHtml(text) {
   return div.innerHTML;
 }
 
-// ==================== UI 渲染 ====================
+// ==================== UI ====================
 
 async function loadCategories() {
   await fetchCategories();
   renderCategoryTabs();
+  renderPriorityTabs();
   fetchTodos();
 }
 
 function renderCategoryTabs() {
-  // 在输入框上方显示分类标签
-  const existingTabs = document.querySelector('.category-tabs');
-  if (existingTabs) existingTabs.remove();
+  const existing = document.querySelector('.category-tabs');
+  if (existing) existing.remove();
   
-  const tabsContainer = document.createElement('div');
-  tabsContainer.className = 'category-tabs';
+  const tabs = document.createElement('div');
+  tabs.className = 'category-tabs';
+  tabs.innerHTML = `<div class="category-tab ${currentCategory === 'all' ? 'active' : ''}" onclick="switchCategory('all')">📋 全部</div>`;
   
-  // 全部
-  tabsContainer.innerHTML += `
-    <div class="category-tab ${currentCategory === 'all' ? 'active' : ''}" onclick="switchCategory('all')">
-      📋 全部
-    </div>
-  `;
-  
-  // 用户分类
   categories.forEach(cat => {
-    tabsContainer.innerHTML += `
-      <div class="category-tab ${currentCategory === cat.id ? 'active' : ''}" 
-           onclick="switchCategory('${cat.id}')"
-           style="${currentCategory === cat.id ? `background:${cat.color}20;border-color:${cat.color}` : ''}">
+    tabs.innerHTML += `
+      <div class="category-tab ${currentCategory === cat.id ? 'active' : ''}" onclick="switchCategory('${cat.id}')" style="${currentCategory === cat.id ? `background:${cat.color}20;border-color:${cat.color}` : ''}">
         ${cat.icon} ${cat.name}
         <span class="delete-cat" onclick="event.stopPropagation(); deleteCategory('${cat.id}')">×</span>
-      </div>
-    `;
+      </div>`;
   });
   
-  // 添加分类按钮
-  tabsContainer.innerHTML += `
-    <div class="category-tab add-cat" onclick="showAddCategory()">
-      ➕ 添加分类
-    </div>
-  `;
+  tabs.innerHTML += `<div class="category-tab add-cat" onclick="showAddCategory()">➕ 添加分类</div>`;
+  document.querySelector('.input-section').before(tabs);
+}
+
+function renderPriorityTabs() {
+  const existing = document.querySelector('.priority-tabs');
+  if (existing) existing.remove();
   
-  document.querySelector('.input-section').before(tabsContainer);
+  const tabs = document.createElement('div');
+  tabs.className = 'priority-tabs';
+  
+  tabs.innerHTML = `<div class="priority-tab ${currentPriority === 'all' ? 'active' : ''}" onclick="switchPriority('all')">🎯 全部</div>`;
+  
+  PRIORITIES.forEach(p => {
+    tabs.innerHTML += `
+      <div class="priority-tab ${currentPriority === p.id ? 'active' : ''}" onclick="switchPriority('${p.id}')" style="${currentPriority === p.id ? `background:${p.bgColor};border-color:${p.color};color:${p.color}` : ''}">
+        ${p.icon} ${p.name}
+      </div>`;
+  });
+  
+  document.querySelector('.input-section').before(tabs);
 }
 
 function switchCategory(catId) {
   currentCategory = catId;
-  renderCategoryTabs();
+  loadCategories();
+}
+
+function switchPriority(priority) {
+  currentPriority = priority;
+  renderPriorityTabs();
+  fetchTodos();
 }
 
 function showAddCategory() {
-  const name = prompt('输入分类名称（如：工作、生活）:');
+  const name = prompt('输入分类名称:');
   if (name && name.trim()) {
     const icons = ['💼', '🏠', '📚', '🎯', '💪', '🎮', '🎵', '🍔'];
-    const icon = prompt(`选择图标（回复数字）:\n${icons.map((ic, i) => `${i+1}. ${ic}`).join('\n')}:`, '1');
+    const icon = prompt(`选择图标(1-8):\n${icons.map((ic, i) => `${i+1}. ${ic}`).join('\n')}:`, '1');
     const colors = ['#e74c3c', '#3498db', '#27ae60', '#f39c12', '#9b59b6', '#1abc9c'];
-    const color = prompt(`选择颜色（回复数字）:\n${colors.map((c, i) => `${i+1}. ${c}`).join('\n')}:`, '1');
-    
-    const selectedIcon = icons[parseInt(icon) - 1] || '📁';
-    const selectedColor = colors[parseInt(color) - 1] || '#667eea';
-    
-    addCategory(name.trim(), selectedIcon, selectedColor);
+    const color = prompt(`选择颜色(1-6):\n${colors.map((c, i) => `${i+1}. ${c}`).join('\n')}:`, '1');
+    addCategory(name.trim(), icons[parseInt(icon) - 1] || '📁', colors[parseInt(color) - 1] || '#667eea');
   }
 }
 
-// ==================== 登录/应用 UI ====================
-
 function showLogin() {
   document.querySelector('header').innerHTML = `
-    <h1>📝 Todo App V2</h1>
-    <p>分类管理</p>
+    <h1>📝 Todo App</h1>
+    <p>V3: 优先级标签</p>
     <div class="auth-form">
       <input type="email" id="authEmail" placeholder="邮箱">
       <input type="password" id="authPassword" placeholder="密码">
@@ -385,7 +368,7 @@ function showApp() {
     <h1>📝 Todo App</h1>
     <p>欢迎，${userEmail}</p>
     <button onclick="logout()" class="logout-btn">退出登录</button>
-    <p style="font-size: 12px; color: #888; margin-top: 5px;">📁 V2: 分类管理</p>
+    <p style="font-size: 12px; color: #888; margin-top: 5px;">🏷️ V3: 优先级标签</p>
   `;
   loadCategories();
 }
@@ -398,21 +381,15 @@ async function handleAuth(action) {
   else await register(email, password);
 }
 
-// ==================== 事件绑定 ====================
+// ==================== 事件 ====================
 
 addBtn.addEventListener('click', () => {
-  const title = todoInput.value.trim();
-  if (title) addTodo(title);
+  if (todoInput.value.trim()) addTodo(todoInput.value);
 });
 
 todoInput.addEventListener('keypress', (e) => {
-  if (e.key === 'Enter') {
-    const title = todoInput.value.trim();
-    if (title) addTodo(title);
-  }
+  if (e.key === 'Enter' && todoInput.value.trim()) addTodo(todoInput.value);
 });
-
-// ==================== 初始化 ====================
 
 document.addEventListener('DOMContentLoaded', () => {
   if (authToken && userEmail) {
@@ -423,11 +400,11 @@ document.addEventListener('DOMContentLoaded', () => {
   }
 });
 
-// 全局函数
 window.toggleTodo = toggleTodo;
 window.deleteTodo = deleteTodo;
 window.handleAuth = handleAuth;
 window.logout = logout;
 window.switchCategory = switchCategory;
+window.switchPriority = switchPriority;
 window.deleteCategory = deleteCategory;
 window.showAddCategory = showAddCategory;
