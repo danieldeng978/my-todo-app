@@ -249,6 +249,70 @@ button:hover {
   background: #5a6268;
 }
 
+/* 分类标签 */
+.category-tabs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-bottom: 15px;
+  padding: 10px;
+  background: #f8f9fa;
+  border-radius: 10px;
+}
+
+.category-tab {
+  padding: 8px 14px;
+  background: white;
+  border: 1px solid #e0e0e0;
+  border-radius: 20px;
+  font-size: 13px;
+  cursor: pointer;
+  transition: all 0.2s;
+  display: flex;
+  align-items: center;
+  gap: 5px;
+}
+
+.category-tab:hover {
+  border-color: #667eea;
+  background: #f0f0ff;
+}
+
+.category-tab.active {
+  background: #667eea;
+  color: white;
+  border-color: #667eea;
+}
+
+.category-tab.add-cat {
+  background: transparent;
+  border-style: dashed;
+  color: #888;
+}
+
+.category-tab.add-cat:hover {
+  background: #667eea20;
+  color: #667eea;
+}
+
+.delete-cat {
+  margin-left: 5px;
+  font-size: 16px;
+  color: #999;
+  cursor: pointer;
+}
+
+.delete-cat:hover {
+  color: #e74c3c;
+}
+
+.todo-category {
+  font-size: 11px;
+  padding: 3px 8px;
+  border-radius: 10px;
+  margin-right: 8px;
+}
+
 /* 登出按钮 */
 .logout-btn {
   background: #dc3545 !important;
