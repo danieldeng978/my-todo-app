@@ -424,8 +424,22 @@ function getRepeatDate(recurring, currentDate) {
 
 // ==================== 通知系统 ====================
 
-async function requestNotificationPermission() {
-  if (!('Notification' in window)) { showMessage(t('browserNotSupport'), 'error'); return false; }
+function showMessage(text, type) {
+  messageEl.textContent = text;
+  messageEl.className = `message ${type}`;
+  setTimeout(() => { messageEl.textContent = ''; messageEl.className = 'message'; }, 4000);
+}
+
+function showFriendlyError(error) {
+  const msg = error.message || String(error);
+  if (msg.includes('Failed to fetch') || msg.includes('NetworkError') || msg.includes('Network request failed') || msg.includes('net::')) {
+    showMessage('⚠️ 网络问题，请检查网络后刷新重试', 'error');
+  } else if (msg.includes('403') || msg.includes('Permission denied') || msg.includes('permission_denied')) {
+    showMessage('⚠️ Firebase 已过期，请联系开发者重新配置', 'error');
+  } else {
+    showMessage(msg, 'error');
+  }
+}
   if (Notification.permission === 'granted') return true;
   if (Notification.permission !== 'denied') {
     const permission = await Notification.requestPermission();
@@ -506,6 +520,13 @@ async function register(email, password) {
 async function login(email, password) {
   try {
     const response = await fetch(`${DATABASE_URL}/users.json`);
+    if (!response.ok) {
+      if (response.status === 403) {
+        showMessage('⚠️ Firebase 数据库权限问题，请联系开发者', 'error');
+        return;
+      }
+      throw new Error(`Server error: ${response.status}`);
+    }
     const usersData = await response.json();
     let foundUser = null, foundUserId = null;
     for (const [userId, user] of Object.entries(usersData || {})) {
@@ -525,7 +546,9 @@ async function login(email, password) {
     showApp();
     showMessage(`${t('welcome')}，${email}！`, 'success');
     checkDueNotifications();
-  } catch (error) { showMessage(error.message, 'error'); }
+  } catch (error) {
+    showFriendlyError(error);
+  }
 }
 
 function logout() {
@@ -648,12 +671,24 @@ async function deleteCategory(catId) {
 async function fetchTodosRaw() {
   const path = getUserPath();
   if (!path) return [];
-  const response = await fetch(`${DATABASE_URL}/${path}.json`);
-  const data = await response.json();
-  if (isSharedMode) {
-    return data && data.todos ? Object.entries(data.todos).map(([id, todo]) => ({ id, ...todo })) : [];
+  try {
+    const response = await fetch(`${DATABASE_URL}/${path}.json`);
+    if (!response.ok) {
+      if (response.status === 403) {
+        showMessage('⚠️ Firebase 权限不足，请刷新页面', 'error');
+        return [];
+      }
+      throw new Error(`Server error: ${response.status}`);
+    }
+    const data = await response.json();
+    if (isSharedMode) {
+      return data && data.todos ? Object.entries(data.todos).map(([id, todo]) => ({ id, ...todo })) : [];
+    }
+    return data ? Object.entries(data).map(([id, todo]) => ({ id, ...todo })) : [];
+  } catch (error) {
+    showFriendlyError(error);
+    return [];
   }
-  return data ? Object.entries(data).map(([id, todo]) => ({ id, ...todo })) : [];
 }
 
 async function fetchTodos() {
