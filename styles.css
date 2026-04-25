@@ -211,6 +211,56 @@ button:hover {
   cursor: pointer;
 }
 
+/* 登录表单 */
+.auth-form {
+  margin-top: 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.auth-form input {
+  padding: 12px 16px;
+  border: 2px solid #e0e0e0;
+  border-radius: 10px;
+  font-size: 14px;
+}
+
+.auth-form input:focus {
+  outline: none;
+  border-color: #667eea;
+}
+
+.auth-buttons {
+  display: flex;
+  gap: 10px;
+}
+
+.auth-buttons button {
+  flex: 1;
+  padding: 12px;
+}
+
+.auth-buttons button.secondary {
+  background: #6c757d;
+}
+
+.auth-buttons button.secondary:hover {
+  background: #5a6268;
+}
+
+/* 登出按钮 */
+.logout-btn {
+  background: #dc3545 !important;
+  font-size: 12px !important;
+  padding: 6px 14px !important;
+  margin-top: 8px;
+}
+
+.logout-btn:hover {
+  background: #c82333 !important;
+}
+
 @keyframes slideUp {
   from {
     transform: translateX(-50%) translateY(100px);

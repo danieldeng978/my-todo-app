@@ -1,21 +1,12 @@
-// public/app.js - Firebase 版本 + 匿名认证
-// 使用 Firebase Anonymous Auth，无需注册登录
+// public/app.js - Todo App with User Authentication
+// 完整用户登录系统：注册、登录、登出
 
 const DATABASE_URL = 'https://first-ad067-default-rtdb.asia-southeast1.firebasedatabase.app';
 
-// Firebase Web App 配置 (从 Firebase Console 获取)
-const firebaseConfig = {
-  apiKey: "AIzaSyDexample123456789placeholder",
-  authDomain: "first-ad067.firebaseapp.com",
-  databaseURL: "https://first-ad067-default-rtdb.asia-southeast1.firebasedatabase.app",
-  projectId: "first-ad067",
-  storageBucket: "first-ad067.appspot.com",
-  messagingSenderId: "000000000000",
-  appId: "1:000000000000:web:placeholder"
-};
-
-// 当前用户 ID
-let currentUserId = localStorage.getItem('todo_user_id');
+// 用户状态
+let currentUser = null;
+let authToken = localStorage.getItem('todo_auth_token');
+let userEmail = localStorage.getItem('todo_user_email');
 
 // DOM 元素
 const todoInput = document.getElementById('todoInput');
@@ -25,51 +16,146 @@ const totalCount = document.getElementById('totalCount');
 const completedCount = document.getElementById('completedCount');
 const pendingCount = document.getElementById('pendingCount');
 const messageEl = document.getElementById('message');
+const header = document.querySelector('header');
 
-// ==================== 匿名用户系统 ====================
+// ==================== 简单的密码哈希 ====================
 
-// 生成或获取匿名用户 ID
-function getAnonymousUserId() {
-  let userId = localStorage.getItem('todo_anon_user');
-  if (!userId) {
-    userId = 'user_' + Date.now().toString(36) + Math.random().toString(36).substr(2, 9);
-    localStorage.setItem('todo_anon_user', userId);
+function hashPassword(password) {
+  // 简单的哈希（用于演示，生产环境用bcrypt）
+  let hash = 0;
+  for (let i = 0; i < password.length; i++) {
+    const char = password.charCodeAt(i);
+    hash = ((hash << 5) - hash) + char;
+    hash = hash & hash;
   }
-  return userId;
+  return 'hash_' + Math.abs(hash).toString(36);
 }
 
-// 获取当前用户的数据路径
+// ==================== 用户系统 ====================
+
+// 生成用户ID
+function generateUserId() {
+  return 'user_' + Date.now().toString(36) + Math.random().toString(36).substr(2, 9);
+}
+
+// 注册
+async function register(email, password) {
+  try {
+    // 检查是否已存在
+    const checkResponse = await fetch(`${DATABASE_URL}/users.json`);
+    const usersData = await checkResponse.json();
+    
+    if (usersData) {
+      const existingUser = Object.values(usersData).find(u => u.email === email);
+      if (existingUser) {
+        throw new Error('该邮箱已注册');
+      }
+    }
+    
+    // 创建新用户
+    const userId = generateUserId();
+    const userData = {
+      email,
+      passwordHash: hashPassword(password),
+      created: new Date().toISOString()
+    };
+    
+    const response = await fetch(`${DATABASE_URL}/users/${userId}.json`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(userData)
+    });
+    
+    if (!response.ok) throw new Error('注册失败');
+    
+    // 自动登录
+    login(email, password);
+    
+  } catch (error) {
+    showMessage(error.message, 'error');
+  }
+}
+
+// 登录
+async function login(email, password) {
+  try {
+    const response = await fetch(`${DATABASE_URL}/users.json`);
+    const usersData = await response.json();
+    
+    if (!usersData) throw new Error('无用户数据');
+    
+    // 查找用户
+    let foundUser = null;
+    let foundUserId = null;
+    
+    for (const [userId, user] of Object.entries(usersData)) {
+      if (user.email === email && user.passwordHash === hashPassword(password)) {
+        foundUser = user;
+        foundUserId = userId;
+        break;
+      }
+    }
+    
+    if (!foundUser) throw new Error('邮箱或密码错误');
+    
+    // 保存登录状态
+    currentUser = { id: foundUserId, email: foundUser.email };
+    authToken = foundUserId;
+    userEmail = email;
+    localStorage.setItem('todo_auth_token', authToken);
+    localStorage.setItem('todo_user_email', email);
+    
+    // 刷新界面
+    showApp();
+    showMessage(`欢迎回来，${email}！`, 'success');
+    
+  } catch (error) {
+    showMessage(error.message, 'error');
+  }
+}
+
+// 登出
+function logout() {
+  currentUser = null;
+  authToken = null;
+  userEmail = null;
+  localStorage.removeItem('todo_auth_token');
+  localStorage.removeItem('todo_user_email');
+  showLogin();
+  showMessage('已退出登录', 'success');
+}
+
+// 获取用户数据路径
 function getUserPath() {
-  const userId = getAnonymousUserId();
-  return `todos_${userId}`;
+  return authToken ? `todos_${authToken}` : null;
 }
 
-// ==================== Firebase REST API ====================
+// ==================== Todo CRUD ====================
 
-// 获取当前用户所有待办
 async function fetchTodos() {
+  if (!authToken) return;
+  
   try {
     const path = getUserPath();
     const response = await fetch(`${DATABASE_URL}/${path}.json`);
-    
-    if (!response.ok) {
-      throw new Error('连接失败');
-    }
-    
     const data = await response.json();
+    
     const todos = data ? Object.entries(data).map(([id, todo]) => ({ id, ...todo })) : [];
     todos.sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
     
     renderTodos(todos);
     updateStats(todos);
   } catch (error) {
-    showMessage('获取数据失败: ' + error.message, 'error');
+    showMessage('获取数据失败', 'error');
   }
 }
 
-// 添加待办
 async function addTodo(title) {
   if (!title.trim()) return;
+  if (!authToken) {
+    showMessage('请先登录', 'error');
+    return;
+  }
   
   try {
     const path = getUserPath();
@@ -91,51 +177,41 @@ async function addTodo(title) {
     fetchTodos();
     todoInput.value = '';
   } catch (error) {
-    showMessage('添加失败: ' + error.message, 'error');
+    showMessage(error.message, 'error');
   }
 }
 
-// 切换完成状态
 async function toggleTodo(id) {
   try {
     const path = getUserPath();
-    
-    // 获取当前状态
     const getResponse = await fetch(`${DATABASE_URL}/${path}/${id}.json`);
     const todo = await getResponse.json();
     
     if (!todo) throw new Error('未找到');
     
-    // 更新
-    const updateResponse = await fetch(`${DATABASE_URL}/${path}/${id}.json`, {
+    await fetch(`${DATABASE_URL}/${path}/${id}.json`, {
       method: 'PATCH',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ completed: !todo.completed })
     });
     
-    if (!updateResponse.ok) throw new Error('更新失败');
-    
     fetchTodos();
   } catch (error) {
-    showMessage('更新失败: ' + error.message, 'error');
+    showMessage(error.message, 'error');
   }
 }
 
-// 删除待办
 async function deleteTodo(id) {
   try {
     const path = getUserPath();
-    
-    const response = await fetch(`${DATABASE_URL}/${path}/${id}.json`, {
+    await fetch(`${DATABASE_URL}/${path}/${id}.json`, {
       method: 'DELETE'
     });
-    
-    if (!response.ok) throw new Error('删除失败');
     
     showMessage('删除成功！', 'success');
     fetchTodos();
   } catch (error) {
-    showMessage('删除失败: ' + error.message, 'error');
+    showMessage(error.message, 'error');
   }
 }
 
@@ -144,11 +220,13 @@ async function deleteTodo(id) {
 function renderTodos(todos) {
   todoList.innerHTML = '';
   
+  if (!authToken) return;
+  
   if (todos.length === 0) {
     todoList.innerHTML = `
       <li class="empty-state">
         <span>📋</span>
-        <p>暂无待办事项，添加一个吧！</p>
+        <p>暂无待办，添加一个吧！</p>
       </li>
     `;
     return;
@@ -157,18 +235,11 @@ function renderTodos(todos) {
   todos.forEach(todo => {
     const li = document.createElement('li');
     li.className = `todo-item ${todo.completed ? 'completed' : ''}`;
-    
     li.innerHTML = `
-      <input 
-        type="checkbox" 
-        class="todo-checkbox" 
-        ${todo.completed ? 'checked' : ''}
-        onchange="toggleTodo('${todo.id}')"
-      >
+      <input type="checkbox" class="todo-checkbox" ${todo.completed ? 'checked' : ''} onchange="toggleTodo('${todo.id}')">
       <span class="todo-text">${escapeHtml(todo.title)}</span>
       <button class="delete-btn" onclick="deleteTodo('${todo.id}')">删除</button>
     `;
-    
     todoList.appendChild(li);
   });
 }
@@ -176,17 +247,14 @@ function renderTodos(todos) {
 function updateStats(todos) {
   const total = todos.length;
   const completed = todos.filter(t => t.completed).length;
-  const pending = total - completed;
-  
   totalCount.textContent = total;
   completedCount.textContent = completed;
-  pendingCount.textContent = pending;
+  pendingCount.textContent = total - completed;
 }
 
 function showMessage(text, type) {
   messageEl.textContent = text;
   messageEl.className = `message ${type}`;
-  
   setTimeout(() => {
     messageEl.textContent = '';
     messageEl.className = 'message';
@@ -197,6 +265,55 @@ function escapeHtml(text) {
   const div = document.createElement('div');
   div.textContent = text;
   return div.innerHTML;
+}
+
+// ==================== UI 切换 ====================
+
+function showLogin() {
+  header.innerHTML = `
+    <h1>📝 Todo App</h1>
+    <p>用户登录</p>
+    <div class="auth-form">
+      <input type="email" id="authEmail" placeholder="邮箱">
+      <input type="password" id="authPassword" placeholder="密码">
+      <div class="auth-buttons">
+        <button onclick="handleAuth('login')">登录</button>
+        <button onclick="handleAuth('register')" class="secondary">注册</button>
+      </div>
+    </div>
+  `;
+  todoList.innerHTML = '';
+  updateStats([0,0,0]);
+  totalCount.textContent = '0';
+  completedCount.textContent = '0';
+  pendingCount.textContent = '0';
+}
+
+function showApp() {
+  header.innerHTML = `
+    <h1>📝 Todo App</h1>
+    <p>欢迎，${userEmail}</p>
+    <button onclick="logout()" class="logout-btn">退出登录</button>
+    <p style="font-size: 12px; color: #888; margin-top: 5px;">
+      🔄 数据同步到 Firebase 云端
+    </p>
+  `;
+}
+
+async function handleAuth(action) {
+  const email = document.getElementById('authEmail').value.trim();
+  const password = document.getElementById('authPassword').value;
+  
+  if (!email || !password) {
+    showMessage('请输入邮箱和密码', 'error');
+    return;
+  }
+  
+  if (action === 'login') {
+    await login(email, password);
+  } else {
+    await register(email, password);
+  }
 }
 
 // ==================== 事件绑定 ====================
@@ -216,8 +333,16 @@ todoInput.addEventListener('keypress', (e) => {
 // ==================== 初始化 ====================
 
 document.addEventListener('DOMContentLoaded', () => {
-  fetchTodos();
+  if (authToken && userEmail) {
+    currentUser = { id: authToken, email: userEmail };
+    showApp();
+    fetchTodos();
+  } else {
+    showLogin();
+  }
 });
 
 window.toggleTodo = toggleTodo;
 window.deleteTodo = deleteTodo;
+window.handleAuth = handleAuth;
+window.logout = logout;
