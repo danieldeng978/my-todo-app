@@ -477,6 +477,173 @@ button:hover {
   background: #c0392b;
 }
 
+/* 统计面板 */
+.stats-btn {
+  background: #9b59b6;
+  color: white;
+}
+
+.stats-btn:hover {
+  background: #8e44ad;
+}
+
+.stats-dashboard {
+  background: white;
+  border-radius: 16px;
+  padding: 20px;
+  margin-bottom: 20px;
+  box-shadow: 0 4px 20px rgba(0,0,0,0.1);
+}
+
+.stats-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 20px;
+}
+
+.stats-header h3 {
+  color: #333;
+  margin: 0;
+}
+
+.stats-header .close-stats {
+  background: #e0e0e0;
+  border: none;
+  width: 30px;
+  height: 30px;
+  border-radius: 50%;
+  font-size: 18px;
+  cursor: pointer;
+  color: #666;
+}
+
+.stats-grid {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 10px;
+  margin-bottom: 20px;
+}
+
+.stat-card {
+  background: #f8f9fa;
+  padding: 15px;
+  border-radius: 12px;
+  text-align: center;
+}
+
+.stat-card.total { background: #667eea20; }
+.stat-card.completed { background: #27ae6020; }
+.stat-card.pending { background: #f39c1220; }
+.stat-card.overdue { background: #e74c3c20; }
+
+.stat-number {
+  font-size: 28px;
+  font-weight: bold;
+  color: #333;
+}
+
+.stat-label {
+  font-size: 12px;
+  color: #666;
+  margin-top: 5px;
+}
+
+.stats-section {
+  margin-top: 20px;
+  padding-top: 20px;
+  border-top: 1px solid #eee;
+}
+
+.stats-section h4 {
+  margin: 0 0 15px 0;
+  color: #333;
+  font-size: 14px;
+}
+
+.bar-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 10px;
+}
+
+.bar-label {
+  width: 60px;
+  font-size: 12px;
+  color: #666;
+}
+
+.bar-bg {
+  flex: 1;
+  height: 8px;
+  background: #f0f0f0;
+  border-radius: 4px;
+  overflow: hidden;
+}
+
+.bar-fill {
+  height: 100%;
+  border-radius: 4px;
+  transition: width 0.3s;
+}
+
+.bar-fill.high { background: #e74c3c; }
+.bar-fill.medium { background: #f39c12; }
+.bar-fill.low { background: #27ae60; }
+
+.bar-count {
+  width: 30px;
+  text-align: right;
+  font-size: 14px;
+  font-weight: 600;
+  color: #333;
+}
+
+.time-alerts {
+  display: flex;
+  gap: 10px;
+}
+
+.alert-item {
+  flex: 1;
+  padding: 12px;
+  border-radius: 10px;
+  text-align: center;
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+}
+
+.alert-item.overdue { background: #e74c3c20; }
+.alert-item.today { background: #f39c1220; }
+.alert-item.week { background: #27ae6020; }
+
+.alert-item span {
+  font-size: 12px;
+  color: #666;
+}
+
+.alert-item strong {
+  font-size: 20px;
+  color: #333;
+}
+
+.category-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+.category-stat {
+  padding: 8px 12px;
+  background: #f8f9fa;
+  border-radius: 8px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
 /* 登出按钮 */
 .logout-btn {
   background: #dc3545 !important;

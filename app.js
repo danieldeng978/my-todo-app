@@ -1,5 +1,5 @@
-// public/app.js - Todo App V6: Export/Import
-// 添加数据导出/导入功能
+// public/app.js - Todo App V7: Statistics/Stats Dashboard
+// 添加统计图表功能
 
 const DATABASE_URL = 'https://first-ad067-default-rtdb.asia-southeast1.firebasedatabase.app';
 
@@ -11,6 +11,7 @@ let currentCategory = 'all';
 let currentPriority = 'all';
 let searchQuery = '';
 let categories = [];
+let showStats = false;
 
 // 优先级
 const PRIORITIES = [
@@ -276,23 +277,162 @@ async function setDueDate(id, currentDate) {
   }
 }
 
-// ==================== 导出/导入功能 ====================
+// ==================== 统计功能 ====================
+
+async function getStats() {
+  const todos = await fetchTodosRaw();
+  
+  const stats = {
+    total: todos.length,
+    completed: todos.filter(t => t.completed).length,
+    pending: todos.filter(t => !t.completed).length,
+    byPriority: {
+      high: todos.filter(t => t.priority === 'high').length,
+      medium: todos.filter(t => t.priority === 'medium').length,
+      low: todos.filter(t => t.priority === 'low').length
+    },
+    byCategory: {},
+    overdue: todos.filter(t => t.dueDate && !t.completed && t.dueDate < new Date().toISOString().split('T')[0]).length,
+    dueToday: todos.filter(t => t.dueDate && !t.completed && t.dueDate === new Date().toISOString().split('T')[0]).length,
+    dueThisWeek: 0
+  };
+  
+  const today = new Date();
+  const weekEnd = new Date(today);
+  weekEnd.setDate(weekEnd.getDate() + 7);
+  
+  todos.filter(t => t.dueDate && !t.completed).forEach(t => {
+    if (t.dueDate >= new Date().toISOString().split('T')[0] && t.dueDate <= weekEnd.toISOString().split('T')[0]) {
+      stats.dueThisWeek++;
+    }
+  });
+  
+  categories.forEach(cat => {
+    stats.byCategory[cat.id] = todos.filter(t => t.category === cat.id).length;
+  });
+  
+  return stats;
+}
+
+async function toggleStats() {
+  showStats = !showStats;
+  if (showStats) {
+    renderStats();
+  } else {
+    hideStats();
+  }
+}
+
+async function renderStats() {
+  const existing = document.querySelector('.stats-dashboard');
+  if (existing) existing.remove();
+  
+  const stats = await getStats();
+  
+  const dashboard = document.createElement('div');
+  dashboard.className = 'stats-dashboard';
+  
+  dashboard.innerHTML = `
+    <div class="stats-header">
+      <h3>📊 统计概览</h3>
+      <button onclick="toggleStats()" class="close-stats">×</button>
+    </div>
+    
+    <div class="stats-grid">
+      <div class="stat-card total">
+        <div class="stat-number">${stats.total}</div>
+        <div class="stat-label">总计</div>
+      </div>
+      <div class="stat-card completed">
+        <div class="stat-number">${stats.completed}</div>
+        <div class="stat-label">已完成</div>
+      </div>
+      <div class="stat-card pending">
+        <div class="stat-number">${stats.pending}</div>
+        <div class="stat-label">进行中</div>
+      </div>
+      <div class="stat-card overdue">
+        <div class="stat-number">${stats.overdue}</div>
+        <div class="stat-label">已过期</div>
+      </div>
+    </div>
+    
+    <div class="stats-section">
+      <h4>🔴 按优先级</h4>
+      <div class="priority-bars">
+        <div class="bar-row">
+          <span class="bar-label">🔴 紧急</span>
+          <div class="bar-bg"><div class="bar-fill high" style="width:${stats.total ? (stats.byPriority.high / stats.total * 100) : 0}%"></div></div>
+          <span class="bar-count">${stats.byPriority.high}</span>
+        </div>
+        <div class="bar-row">
+          <span class="bar-label">🟡 重要</span>
+          <div class="bar-bg"><div class="bar-fill medium" style="width:${stats.total ? (stats.byPriority.medium / stats.total * 100) : 0}%"></div></div>
+          <span class="bar-count">${stats.byPriority.medium}</span>
+        </div>
+        <div class="bar-row">
+          <span class="bar-label">🟢 一般</span>
+          <div class="bar-bg"><div class="bar-fill low" style="width:${stats.total ? (stats.byPriority.low / stats.total * 100) : 0}%"></div></div>
+          <span class="bar-count">${stats.byPriority.low}</span>
+        </div>
+      </div>
+    </div>
+    
+    <div class="stats-section">
+      <h4>📅 时间提醒</h4>
+      <div class="time-alerts">
+        <div class="alert-item overdue">
+          <span>🔴 已过期</span>
+          <strong>${stats.overdue}</strong>
+        </div>
+        <div class="alert-item today">
+          <span>🟡 今天到期</span>
+          <strong>${stats.dueToday}</strong>
+        </div>
+        <div class="alert-item week">
+          <span>📆 本周到期</span>
+          <strong>${stats.dueThisWeek}</strong>
+        </div>
+      </div>
+    </div>
+    
+    ${categories.length > 0 ? `
+    <div class="stats-section">
+      <h4>📁 按分类</h4>
+      <div class="category-list">
+        ${categories.map(cat => `
+          <div class="category-stat">
+            <span style="color:${cat.color}">${cat.icon} ${cat.name}</span>
+            <strong>${stats.byCategory[cat.id] || 0}</strong>
+          </div>
+        `).join('')}
+      </div>
+    </div>
+    ` : ''}
+  `;
+  
+  document.querySelector('.container').prepend(dashboard);
+}
+
+function hideStats() {
+  const existing = document.querySelector('.stats-dashboard');
+  if (existing) existing.remove();
+}
+
+// ==================== 导出/导入 ====================
 
 async function exportData() {
   if (!authToken) return;
-  
   try {
     const todos = await fetchTodosRaw();
     const cats = await fetchCategories();
-    
     const exportData = {
-      version: 'V6',
+      version: 'V7',
       exportDate: new Date().toISOString(),
       userEmail: userEmail,
       todos: todos,
       categories: cats
     };
-    
     const blob = new Blob([JSON.stringify(exportData, null, 2)], { type: 'application/json' });
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
@@ -300,7 +440,6 @@ async function exportData() {
     a.download = `todo-backup-${new Date().toISOString().split('T')[0]}.json`;
     a.click();
     URL.revokeObjectURL(url);
-    
     showMessage(`已导出 ${todos.length} 条待办`, 'success');
   } catch (error) {
     showMessage('导出失败', 'error');
@@ -309,34 +448,23 @@ async function exportData() {
 
 async function importData() {
   if (!authToken) return;
-  
   const input = document.createElement('input');
   input.type = 'file';
   input.accept = '.json';
-  
   input.onchange = async (e) => {
     const file = e.target.files[0];
     if (!file) return;
-    
     try {
       const text = await file.text();
       const data = JSON.parse(text);
-      
-      if (!data.todos || !Array.isArray(data.todos)) {
-        throw new Error('文件格式不正确');
-      }
-      
-      const overwrite = confirm(`将导入 ${data.todos.length} 条待办\n\n选择"确定"覆盖现有数据，"取消"则追加到现有数据`);
-      
+      if (!data.todos || !Array.isArray(data.todos)) throw new Error('文件格式不正确');
+      const overwrite = confirm(`将导入 ${data.todos.length} 条待办\n\n"确定"覆盖，"取消"追加`);
       if (overwrite) {
-        // 删除现有数据
         const existingTodos = await fetchTodosRaw();
         for (const todo of existingTodos) {
           await fetch(`${DATABASE_URL}/${getUserPath()}/${todo.id}.json`, { method: 'DELETE' });
         }
       }
-      
-      // 导入新数据
       let imported = 0;
       for (const todo of data.todos) {
         const newTodo = {
@@ -347,7 +475,6 @@ async function importData() {
           priority: todo.priority || 'medium',
           dueDate: todo.dueDate || null
         };
-        
         await fetch(`${DATABASE_URL}/${getUserPath()}.json`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
@@ -355,7 +482,6 @@ async function importData() {
         });
         imported++;
       }
-      
       showMessage(`成功导入 ${imported} 条待办`, 'success');
       loadCategories();
       fetchTodos();
@@ -363,30 +489,25 @@ async function importData() {
       showMessage('导入失败: ' + error.message, 'error');
     }
   };
-  
   input.click();
 }
 
 async function clearAllData() {
   if (!authToken) return;
-  
-  const confirm = prompt('危险操作！\n\n输入"删除"确认清空所有数据:');
-  if (confirm !== '删除') {
+  const confirmText = prompt('危险操作！\n\n输入"删除"确认清空所有数据:');
+  if (confirmText !== '删除') {
     showMessage('已取消', 'error');
     return;
   }
-  
   try {
     const todos = await fetchTodosRaw();
     for (const todo of todos) {
       await fetch(`${DATABASE_URL}/${getUserPath()}/${todo.id}.json`, { method: 'DELETE' });
     }
-    
     const cats = await fetchCategories();
     for (const cat of cats) {
       await fetch(`${DATABASE_URL}/${getCategoriesPath()}/${cat.id}.json`, { method: 'DELETE' });
     }
-    
     showMessage('已清空所有数据', 'success');
     loadCategories();
     fetchTodos();
@@ -406,7 +527,6 @@ function performSearch(query) {
 function renderSearchResults() {
   const existing = document.querySelector('.search-results-info');
   if (existing) existing.remove();
-  
   if (searchQuery) {
     const info = document.createElement('div');
     info.className = 'search-results-info';
@@ -551,7 +671,7 @@ function showAddCategory() {
 function showLogin() {
   document.querySelector('header').innerHTML = `
     <h1>📝 Todo App</h1>
-    <p>V6: 导出/导入</p>
+    <p>V7: 统计图表</p>
     <div class="auth-form">
       <input type="email" id="authEmail" placeholder="邮箱">
       <input type="password" id="authPassword" placeholder="密码">
@@ -573,7 +693,7 @@ function showApp() {
     <div class="export-import-bar">
       <button onclick="exportData()" class="export-btn">📤 导出</button>
       <button onclick="importData()" class="import-btn">📥 导入</button>
-      <button onclick="clearAllData()" class="clear-btn">🗑️ 清空</button>
+      <button onclick="toggleStats()" class="stats-btn">📊 统计</button>
     </div>
   `;
   
@@ -581,7 +701,7 @@ function showApp() {
     <h1>📝 Todo App</h1>
     <p>欢迎，${userEmail}</p>
     <button onclick="logout()" class="logout-btn">退出登录</button>
-    <p style="font-size: 12px; color: #888; margin-top: 5px;">📤 V6: 导出/导入</p>
+    <p style="font-size: 12px; color: #888; margin-top: 5px;">📊 V7: 统计图表</p>
     ${searchHTML}
     ${exportHTML}
   `;
@@ -627,3 +747,4 @@ window.showAddCategory = showAddCategory;
 window.exportData = exportData;
 window.importData = importData;
 window.clearAllData = clearAllData;
+window.toggleStats = toggleStats;
