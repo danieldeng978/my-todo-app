@@ -383,6 +383,55 @@ button:hover {
   color: white;
 }
 
+/* 搜索框 */
+.search-box {
+  margin-top: 15px;
+  margin-bottom: 10px;
+}
+
+.search-box input {
+  width: 100%;
+  padding: 12px 16px;
+  border: 2px solid #e0e0e0;
+  border-radius: 10px;
+  font-size: 14px;
+  box-sizing: border-box;
+}
+
+.search-box input:focus {
+  outline: none;
+  border-color: #667eea;
+}
+
+/* 搜索结果信息 */
+.search-results-info {
+  padding: 10px 15px;
+  background: #e8eaff;
+  border-radius: 8px;
+  margin-bottom: 10px;
+  font-size: 14px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.search-results-info button {
+  background: #667eea;
+  color: white;
+  border: none;
+  padding: 5px 12px;
+  border-radius: 15px;
+  font-size: 12px;
+  cursor: pointer;
+}
+
+/* 搜索高亮 */
+.todo-text mark {
+  background: #fff34d;
+  padding: 0 2px;
+  border-radius: 2px;
+}
+
 /* 登出按钮 */
 .logout-btn {
   background: #dc3545 !important;
