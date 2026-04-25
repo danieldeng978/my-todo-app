@@ -1,0 +1,102 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  
+  <!-- PWA Meta Tags -->
+  <meta name="theme-color" content="#667eea">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="apple-mobile-web-app-title" content="Todo">
+  <meta name="mobile-web-app-capable" content="yes">
+  
+  <title>Todo App - 学习全栈</title>
+  
+  <!-- PWA Manifest -->
+  <link rel="manifest" href="manifest.json">
+  
+  <!-- Favicon -->
+  <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><rect fill='%23667eea' width='100' height='100' rx='20'/><text x='50' y='65' font-size='50' text-anchor='middle' fill='white'>✅</text></svg>">
+  
+  <!-- Apple Touch Icon -->
+  <link rel="apple-touch-icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><rect fill='%23667eea' width='100' height='100' rx='20'/><text x='50' y='65' font-size='50' text-anchor='middle' fill='white'>✅</text></svg>">
+  
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <div class="container">
+    <header>
+      <h1>📝 Todo App</h1>
+      <p>我的第一个全栈应用</p>
+      <p style="font-size: 12px; color: #888; margin-top: 5px;">
+        🔄 数据同步到 Firebase 云端
+      </p>
+    </header>
+
+    <!-- 输入区域 -->
+    <div class="input-section">
+      <input 
+        type="text" 
+        id="todoInput" 
+        placeholder="输入新的待办事项..."
+        autocomplete="off"
+      >
+      <button id="addBtn">添加</button>
+    </div>
+
+    <!-- 统计信息 -->
+    <div class="stats">
+      <span>总计: <strong id="totalCount">0</strong></span>
+      <span>已完成: <strong id="completedCount">0</strong></span>
+      <span>未完成: <strong id="pendingCount">0</strong></span>
+    </div>
+
+    <!-- 离线状态提示 -->
+    <div id="offlineStatus" class="offline-status" style="display: none;">
+      📴 当前离线模式（数据暂存本地）
+    </div>
+
+    <!-- 待办列表 -->
+    <ul id="todoList" class="todo-list">
+      <!-- 待办项会动态插入到这里 -->
+    </ul>
+
+    <!-- 提示信息 -->
+    <div id="message" class="message"></div>
+    
+    <!-- PWA 安装提示 -->
+    
+  </div>
+
+  <script src="app.js"></script>
+  
+  <!-- Service Worker 注册 -->
+  <script>
+    // 注册 Service Worker
+    if ('serviceWorker' in navigator) {
+      window.addEventListener('load', () => {
+        navigator.serviceWorker.register('/sw.js')
+          .then((registration) => {
+            console.log('[App] Service Worker 注册成功:', registration.scope);
+          })
+          .catch((error) => {
+            console.log('[App] Service Worker 注册失败:', error);
+          });
+      });
+    }
+
+    // 监听网络状态
+    window.addEventListener('online', () => {
+      document.getElementById('offlineStatus').style.display = 'none';
+      console.log('[App] 网络已恢复');
+    });
+
+    window.addEventListener('offline', () => {
+      document.getElementById('offlineStatus').style.display = 'block';
+      console.log('[App] 网络已断开');
+    });
+
+      </script>
+</body>
+</html>
