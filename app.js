@@ -1,13 +1,13 @@
-// public/app.js - Todo App V11: Dark Mode + Recurring + Subtasks + Shortcuts
-// 添加全部新功能
+// public/app.js - Todo App V12: Voice Robot System
+// 添加语音机器人功能
 
-const DATABASE_URL = 'https://first-ad067-default-rtdb.asia-southeast1.firebasedatabase.app';
+const DATABASE_URL = 'https://first-ad067-default-rtdb.asia-southeast1.fireasedatabase.app';
 
 // ==================== 国际化 ====================
 
 const translations = {
   zh: {
-    appName: 'Todo App', version: '全功能版', welcome: '欢迎', guest: '访客', logout: '退出登录',
+    appName: 'Todo App', version: '语音版', welcome: '欢迎', guest: '访客', logout: '退出登录',
     login: '登录', register: '注册', email: '邮箱', password: '密码', addTodo: '添加待办...', add: '添加',
     search: '搜索...', clear: '清除', all: '全部', categories: '分类', addCategory: '添加分类',
     export: '导出', import: '导入', stats: '统计', share: '分享', joinShare: '加入分享',
@@ -34,10 +34,14 @@ const translations = {
     enterShareCode: '输入分享码:', shareUrl: '分享链接', language: '语言', chinese: '中文', english: 'English',
     darkMode: '深色模式', lightMode: '浅色模式', recurring: '重复', daily: '每天', weekly: '每周',
     monthly: '每月', none: '不重复', subtasks: '子任务', addSubtask: '添加子任务', subtaskPlaceholder: '输入子任务...',
-    shortcuts: '快捷键', pressShortcut: '按 {key} 快速操作', keyboardShortcuts: '键盘快捷键'
+    shortcuts: '快捷键', pressShortcut: '按 {key} 快速操作', keyboardShortcuts: '键盘快捷键',
+    voiceRobot: '语音助手', voiceListening: '正在听...', voiceHint: '点击说话', voiceNotSupported: '语音不支持',
+    voicePermission: '请允许麦克风权限', voiceError: '语音识别错误', voiceTimeout: '没有听到声音',
+    voiceAdded: '已添加待办', voiceShowed: '这是你的待办', voiceEmpty: '暂无待办', voiceCompleted: '已完成',
+    voicePending: '进行中', voiceHelp: '可以说"添加待办吃饭"或"显示我的待办"'
   },
   en: {
-    appName: 'Todo App', version: 'Full Features', welcome: 'Welcome', guest: 'Guest', logout: 'Logout',
+    appName: 'Todo App', version: 'Voice Version', welcome: 'Welcome', guest: 'Guest', logout: 'Logout',
     login: 'Login', register: 'Register', email: 'Email', password: 'Password', addTodo: 'Add todo...', add: 'Add',
     search: 'Search...', clear: 'Clear', all: 'All', categories: 'Categories', addCategory: 'Add Category',
     export: 'Export', import: 'Import', stats: 'Stats', share: 'Share', joinShare: 'Join Share',
@@ -64,7 +68,11 @@ const translations = {
     enterShareCode: 'Enter share code:', shareUrl: 'Share URL', language: 'Language', chinese: '中文', english: 'English',
     darkMode: 'Dark Mode', lightMode: 'Light Mode', recurring: 'Recurring', daily: 'Daily', weekly: 'Weekly',
     monthly: 'Monthly', none: 'No Repeat', subtasks: 'Subtasks', addSubtask: 'Add Subtask', subtaskPlaceholder: 'Enter subtask...',
-    shortcuts: 'Shortcuts', pressShortcut: 'Press {key} for quick action', keyboardShortcuts: 'Keyboard Shortcuts'
+    shortcuts: 'Shortcuts', pressShortcut: 'Press {key} for quick action', keyboardShortcuts: 'Keyboard Shortcuts',
+    voiceRobot: 'Voice Assistant', voiceListening: 'Listening...', voiceHint: 'Tap to speak', voiceNotSupported: 'Voice not supported',
+    voicePermission: 'Please allow microphone', voiceError: 'Voice recognition error', voiceTimeout: 'No voice detected',
+    voiceAdded: 'Todo added', voiceShowed: 'Here are your todos', voiceEmpty: 'No todos yet', voiceCompleted: 'completed',
+    voicePending: 'pending', voiceHelp: 'Say "add todo eat" or "show my todos"'
   }
 };
 
@@ -90,10 +98,256 @@ function toggleDarkMode() {
 }
 
 function applyDarkMode() {
-  if (isDarkMode) {
-    document.body.classList.add('dark');
-  } else {
-    document.body.classList.remove('dark');
+  if (isDarkMode) document.body.classList.add('dark');
+  else document.body.classList.remove('dark');
+}
+
+// ==================== 语音机器人系统 ====================
+
+let voiceRecognition = null;
+let voiceSynthesis = window.speechSynthesis;
+let isListening = false;
+let voiceRobotExpanded = false;
+
+function isVoiceSupported() {
+  return 'webkitSpeechRecognition' in window || 'SpeechRecognition' in window;
+}
+
+function initVoiceRecognition() {
+  if (!isVoiceSupported()) return;
+  
+  const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+  voiceRecognition = new SpeechRecognition();
+  voiceRecognition.continuous = false;
+  voiceRecognition.interimResults = false;
+  voiceRecognition.lang = currentLang === 'zh' ? 'zh-CN' : 'en-US';
+  
+  voiceRecognition.onstart = () => {
+    isListening = true;
+    updateVoiceButton();
+    showVoiceStatus(t('voiceListening'), 'listening');
+  };
+  
+  voiceRecognition.onend = () => {
+    isListening = false;
+    updateVoiceButton();
+    hideVoiceStatus();
+  };
+  
+  voiceRecognition.onerror = (event) => {
+    isListening = false;
+    updateVoiceButton();
+    hideVoiceStatus();
+    if (event.error === 'not-allowed') {
+      showMessage(t('voicePermission'), 'error');
+    } else {
+      showMessage(t('voiceError'), 'error');
+    }
+  };
+  
+  voiceRecognition.onresult = (event) => {
+    const transcript = event.results[0][0].transcript.toLowerCase().trim();
+    processVoiceCommand(transcript);
+  };
+}
+
+function startListening() {
+  if (!isVoiceSupported()) {
+    showMessage(t('voiceNotSupported'), 'error');
+    return;
+  }
+  
+  if (isListening) {
+    voiceRecognition.stop();
+    return;
+  }
+  
+  voiceRecognition.lang = currentLang === 'zh' ? 'zh-CN' : 'en-US';
+  voiceRecognition.start();
+}
+
+function updateVoiceButton() {
+  const btn = document.getElementById('voiceBtn');
+  if (btn) {
+    if (isListening) {
+      btn.innerHTML = '🔴';
+      btn.classList.add('listening');
+    } else {
+      btn.innerHTML = '🎤';
+      btn.classList.remove('listening');
+    }
+  }
+}
+
+function showVoiceStatus(text, type) {
+  const existing = document.querySelector('.voice-status');
+  if (existing) existing.remove();
+  
+  const status = document.createElement('div');
+  status.className = `voice-status ${type}`;
+  status.innerHTML = `<span class="voice-wave">🔊</span><span>${text}</span>`;
+  document.querySelector('.voice-robot').appendChild(status);
+}
+
+function hideVoiceStatus() {
+  const existing = document.querySelector('.voice-status');
+  if (existing) setTimeout(() => existing.remove(), 1500);
+}
+
+function speak(text) {
+  if (!voiceSynthesis) return;
+  voiceSynthesis.cancel();
+  
+  const utterance = new SpeechSynthesisUtterance(text);
+  utterance.lang = currentLang === 'zh' ? 'zh-CN' : 'en-US';
+  utterance.rate = 1;
+  utterance.pitch = 1;
+  
+  const voices = voiceSynthesis.getVoices();
+  const targetLang = currentLang === 'zh' ? 'zh' : 'en';
+  const foundVoice = voices.find(v => v.lang.startsWith(targetLang));
+  if (foundVoice) utterance.voice = foundVoice;
+  
+  voiceSynthesis.speak(utterance);
+}
+
+async function processVoiceCommand(transcript) {
+  const zhAddPatterns = ['添加', '加', '新建', '创建'];
+  const enAddPatterns = ['add', 'create', 'new', 'todo'];
+  const zhShowPatterns = ['显示', '查看', '我的待办', '有什么'];
+  const enShowPatterns = ['show', 'list', 'my todos', 'what'];
+  const zhCompletePatterns = ['完成', '搞定了', '做好了'];
+  const enCompletePatterns = ['complete', 'done', 'finished'];
+  
+  // 添加待办
+  let added = false;
+  for (const pattern of zhAddPatterns) {
+    if (transcript.includes(pattern)) {
+      const todoTitle = transcript.split(pattern).pop().trim();
+      if (todoTitle) {
+        await addTodoByVoice(todoTitle);
+        added = true;
+        break;
+      }
+    }
+  }
+  if (!added) {
+    for (const pattern of enAddPatterns) {
+      if (transcript.includes(pattern)) {
+        const parts = transcript.split(pattern);
+        const todoTitle = parts[parts.length - 1].trim();
+        if (todoTitle && todoTitle.length > 1) {
+          await addTodoByVoice(todoTitle);
+          added = true;
+          break;
+        }
+      }
+    }
+  }
+  
+  if (added) return;
+  
+  // 显示待办
+  let showed = false;
+  for (const pattern of zhShowPatterns) {
+    if (transcript.includes(pattern)) {
+      await showTodosByVoice();
+      showed = true;
+      break;
+    }
+  }
+  if (!showed) {
+    for (const pattern of enShowPatterns) {
+      if (transcript.includes(pattern)) {
+        await showTodosByVoice();
+        showed = true;
+        break;
+      }
+    }
+  }
+  
+  if (showed) return;
+  
+  // 帮助
+  if (transcript.includes('帮助') || transcript.includes('help') || transcript.includes('怎么用')) {
+    speak(t('voiceHelp'));
+    showVoiceStatus(t('voiceHelp'), 'info');
+  }
+}
+
+async function addTodoByVoice(title) {
+  if (!authToken) {
+    speak(currentLang === 'zh' ? '请先登录' : 'Please login first');
+    return;
+  }
+  
+  try {
+    const newTodo = {
+      title,
+      completed: false,
+      created_at: new Date().toISOString(),
+      category: null,
+      priority: 'medium',
+      dueDate: null,
+      recurring: 'none',
+      subtasks: []
+    };
+    
+    await fetch(`${DATABASE_URL}/${getUserPath()}.json`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(newTodo)
+    });
+    
+    const message = t('voiceAdded') + ': ' + title;
+    speak(message);
+    showVoiceStatus(message, 'success');
+    showMessage(t('addSuccess') + ': ' + title, 'success');
+    
+    fetchTodos();
+  } catch (error) {
+    speak(currentLang === 'zh' ? '添加失败' : 'Failed to add');
+    showMessage(error.message, 'error');
+  }
+}
+
+async function showTodosByVoice() {
+  if (!authToken) {
+    speak(currentLang === 'zh' ? '请先登录' : 'Please login first');
+    return;
+  }
+  
+  try {
+    const todos = await fetchTodosRaw();
+    
+    if (todos.length === 0) {
+      speak(t('voiceEmpty'));
+      showVoiceStatus(t('voiceEmpty'), 'info');
+      return;
+    }
+    
+    const pending = todos.filter(t => !t.completed);
+    const completed = todos.filter(t => t.completed);
+    
+    let message = '';
+    if (pending.length > 0) {
+      message += `${t('voicePending')}: ${pending.length}. `;
+      if (pending.length <= 3) {
+        message += pending.map(t => t.title).join(', ');
+      } else {
+        message += pending.slice(0, 3).map(t => t.title).join(', ');
+        message += `, ${pending.length - 3} more`;
+      }
+    }
+    
+    if (completed.length > 0) {
+      message += `. ${t('voiceCompleted')}: ${completed.length}`;
+    }
+    
+    speak(message);
+    showVoiceStatus(message, 'info');
+  } catch (error) {
+    speak(currentLang === 'zh' ? '读取失败' : 'Failed to load');
   }
 }
 
@@ -440,8 +694,6 @@ async function addTodo() {
   if (!authToken && !isSharedMode) { showMessage(t('pleaseInput') + t('login'), 'error'); return; }
   
   const dueDate = prompt(`${t('setDate')} (${t('dateFormat')})\n${t('skip')}:`, '');
-  
-  // 重复设置
   const recurringOptions = `1. ${t('none')}\n2. ${t('daily')}\n3. ${t('weekly')}\n4. ${t('monthly')}`;
   const recurringChoice = prompt(`${t('recurring')}:\n${recurringOptions}`, '1');
   const recurringMap = { '1': 'none', '2': 'daily', '3': 'weekly', '4': 'monthly' };
@@ -484,18 +736,11 @@ async function toggleTodo(id) {
     const getResponse = await fetch(url + '.json');
     const todo = await getResponse.json();
     
-    // 如果完成且有重复，创建下一个
     if (!todo.completed && todo.recurring && todo.recurring !== 'none') {
       const nextDate = getRepeatDate(todo.recurring, todo.dueDate);
       const newTodo = {
-        title: todo.title,
-        completed: false,
-        created_at: new Date().toISOString(),
-        category: todo.category,
-        priority: todo.priority,
-        dueDate: nextDate,
-        recurring: todo.recurring,
-        subtasks: []
+        title: todo.title, completed: false, created_at: new Date().toISOString(),
+        category: todo.category, priority: todo.priority, dueDate: nextDate, recurring: todo.recurring, subtasks: []
       };
       if (isSharedMode) {
         await fetch(`${DATABASE_URL}/${getUserPath()}/todos.json`, {
@@ -543,10 +788,6 @@ async function setDueDate(id, currentDate) {
     } else if (newDate) {
       await fetch(url, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ dueDate: newDate }) });
       showMessage(t('setDateSuccess'), 'success');
-      const today = new Date().toISOString().split('T')[0];
-      if (newDate === today && notificationsEnabled) {
-        sendNotification('📅 ' + t('dueToday'), `${t('dueToday')}: ${newDate}`, '🟡');
-      }
     }
     fetchTodos();
   } catch (error) { showMessage(error.message, 'error'); }
@@ -565,11 +806,7 @@ async function addSubtask(todoId) {
     const todo = await response.json();
     
     const subtasks = todo.subtasks || [];
-    subtasks.push({
-      id: 'st_' + Date.now(),
-      title: subtaskTitle.trim(),
-      completed: false
-    });
+    subtasks.push({ id: 'st_' + Date.now(), title: subtaskTitle.trim(), completed: false });
     
     await fetch(url, {
       method: 'PATCH', headers: { 'Content-Type': 'application/json' },
@@ -710,6 +947,7 @@ function toggleShortcuts() {
         <div class="shortcut-item"><kbd>D</kbd> <span>${currentLang === 'zh' ? '切换深色模式' : 'Toggle dark mode'}</span></div>
         <div class="shortcut-item"><kbd>L</kbd> <span>${currentLang === 'zh' ? '切换语言' : 'Toggle language'}</span></div>
         <div class="shortcut-item"><kbd>S</kbd> <span>${currentLang === 'zh' ? '统计面板' : 'Stats panel'}</span></div>
+        <div class="shortcut-item"><kbd>V</kbd> <span>${currentLang === 'zh' ? '语音助手' : 'Voice assistant'}</span></div>
         <div class="shortcut-item"><kbd>?</kbd> <span>${currentLang === 'zh' ? '显示帮助' : 'Show help'}</span></div>
       </div>
     `;
@@ -718,11 +956,8 @@ function toggleShortcuts() {
 }
 
 function handleKeyboardShortcuts(e) {
-  // 如果在输入框中，只处理特定快捷键
   if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA') {
-    if (e.key === 'Escape') {
-      e.target.blur();
-    }
+    if (e.key === 'Escape') e.target.blur();
     return;
   }
   
@@ -749,10 +984,64 @@ function handleKeyboardShortcuts(e) {
     case 'S':
       toggleStats();
       break;
+    case 'v':
+    case 'V':
+      toggleVoiceRobot();
+      break;
     case '?':
       toggleShortcuts();
       break;
   }
+}
+
+// ==================== 语音机器人 UI ====================
+
+function toggleVoiceRobot() {
+  voiceRobotExpanded = !voiceRobotExpanded;
+  const robot = document.querySelector('.voice-robot');
+  if (robot) {
+    if (voiceRobotExpanded) {
+      robot.classList.add('expanded');
+    } else {
+      robot.classList.remove('expanded');
+    }
+  }
+}
+
+function renderVoiceRobot() {
+  const existing = document.querySelector('.voice-robot-container');
+  if (existing) existing.remove();
+  
+  const container = document.createElement('div');
+  container.className = 'voice-robot-container';
+  container.innerHTML = `
+    <div class="voice-robot ${voiceRobotExpanded ? 'expanded' : ''}">
+      <button id="voiceBtn" class="voice-robot-btn" onclick="toggleVoiceRobot()">
+        🤖
+      </button>
+      <div class="voice-content">
+        <div class="voice-header">
+          <span class="voice-title">${t('voiceRobot')}</span>
+          <button class="voice-close" onclick="toggleVoiceRobot()">×</button>
+        </div>
+        <div class="voice-body">
+          <div class="voice-hint">
+            <p>${t('voiceHint')}</p>
+            <p class="voice-commands">
+              ${currentLang === 'zh' ? 
+                '• "添加待办吃饭"<br>• "显示我的待办"<br>• "帮助"' : 
+                '• "add todo eat"<br>• "show my todos"<br>• "help"'}
+            </p>
+          </div>
+          <button id="voiceRecordBtn" class="voice-record-btn" onclick="startListening()">
+            <span class="voice-icon">🎤</span>
+            <span class="voice-label">${t('voiceHint')}</span>
+          </button>
+        </div>
+      </div>
+    </div>
+  `;
+  document.body.appendChild(container);
 }
 
 // ==================== 导出/导入 ====================
@@ -763,7 +1052,7 @@ async function exportData() {
     const todos = await fetchTodosRaw();
     const cats = await fetchCategories();
     const exportData = {
-      version: 'V11',
+      version: 'V12',
       exportDate: new Date().toISOString(),
       userEmail: userEmail,
       todos: todos,
@@ -871,14 +1160,12 @@ function renderTodos(todos) {
       else if (todo.dueDate === today) { overdueText = '🟡 ' + t('dueTodayTask'); }
     }
     
-    // 重复图标
     let recurringIcon = '';
     if (todo.recurring && todo.recurring !== 'none') {
       const recurringIconMap = { daily: '🔁', weekly: '🔂', monthly: '🔄' };
       recurringIcon = recurringIconMap[todo.recurring] || '';
     }
     
-    // 子任务
     let subtasksHtml = '';
     const subtasks = todo.subtasks || [];
     if (subtasks.length > 0) {
@@ -926,9 +1213,7 @@ function renderTodos(todos) {
 
 function toggleSubtasksVisibility(todoId) {
   const list = document.getElementById(`subtasks-${todoId}`);
-  if (list) {
-    list.style.display = list.style.display === 'none' ? 'block' : 'none';
-  }
+  if (list) list.style.display = list.style.display === 'none' ? 'block' : 'none';
 }
 
 function highlightMatch(text, query) {
@@ -1001,7 +1286,7 @@ function showAddCategory() {
 function showLogin() {
   document.querySelector('header').innerHTML = `
     <h1>📝 ${t('appName')}</h1>
-    <p>🌙 ${t('version')}</p>
+    <p>🎤 ${t('version')}</p>
     <div class="auth-form">
       <input type="email" id="authEmail" placeholder="${t('email')}">
       <input type="password" id="authPassword" placeholder="${t('password')}">
@@ -1049,12 +1334,13 @@ function showApp() {
         ${authToken && !isSharedMode ? `<button onclick="logout()" class="logout-btn">${t('logout')}</button>` : ''}
       </div>
     </div>
-    <p style="font-size: 12px; color: #888; margin-top: 5px;">🌙 ${t('version')}</p>
+    <p style="font-size: 12px; color: #888; margin-top: 5px;">🎤 ${t('version')}</p>
     ${shareHTML}
     ${searchHTML}
     ${exportHTML}
   `;
   loadCategories();
+  renderVoiceRobot();
 }
 
 async function handleAuth(action) {
@@ -1069,6 +1355,14 @@ async function handleAuth(action) {
 
 async function init() {
   applyDarkMode();
+  initVoiceRecognition();
+  
+  // 等待语音合成声音加载
+  if (voiceSynthesis) {
+    voiceSynthesis.onvoiceschanged = () => {
+      // voices loaded
+    };
+  }
   
   const urlParams = new URLSearchParams(window.location.search);
   const shareCode = urlParams.get('share');
@@ -1105,7 +1399,6 @@ async function init() {
     if (document.visibilityState === 'visible' && authToken) checkDueNotifications();
   });
   
-  // 监听键盘快捷键
   document.addEventListener('keydown', handleKeyboardShortcuts);
 }
 
@@ -1124,6 +1417,7 @@ window.deleteCategory = deleteCategory; window.showAddCategory = showAddCategory
 window.exportData = exportData; window.importData = importData;
 window.toggleStats = toggleStats; window.toggleNotifications = toggleNotifications;
 window.toggleLanguage = toggleLanguage; window.toggleDarkMode = toggleDarkMode; window.toggleShortcuts = toggleShortcuts;
+window.toggleVoiceRobot = toggleVoiceRobot; window.startListening = startListening;
 window.createShare = createShare; window.joinShare = joinShare; window.exitShare = exitShare;
 window.addSubtask = addSubtask; window.toggleSubtask = toggleSubtask; window.deleteSubtask = deleteSubtask;
 window.toggleSubtasksVisibility = toggleSubtasksVisibility;
