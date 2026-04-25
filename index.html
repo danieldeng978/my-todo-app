@@ -66,9 +66,7 @@
     <div id="message" class="message"></div>
     
     <!-- PWA 安装提示 -->
-    <div id="installPrompt" class="install-prompt" style="display: flex;">
-      <span>📱 长按复制到桌面: https://danieldeng978.github.io/my-todo-app/</span>
-    </div>
+    
   </div>
 
   <script src="app.js"></script>
@@ -99,28 +97,6 @@
       console.log('[App] 网络已断开');
     });
 
-    // PWA 安装提示
-    let deferredPrompt;
-    const installPrompt = document.getElementById('installPrompt');
-    const installBtn = document.getElementById('installBtn');
-
-    window.addEventListener('beforeinstallprompt', (e) => {
-      e.preventDefault();
-      deferredPrompt = e;
-      installPrompt.style.display = 'flex';
-    });
-
-    if (installBtn) {
-      installBtn.addEventListener('click', async () => {
-        if (deferredPrompt) {
-          deferredPrompt.prompt();
-          const { outcome } = await deferredPrompt.userChoice;
-          console.log('[App] 安装提示结果:', outcome);
-          deferredPrompt = null;
-          installPrompt.style.display = 'none';
-        }
-      });
-    }
-  </script>
+      </script>
 </body>
 </html>
