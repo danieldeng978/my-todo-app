@@ -1,9 +1,226 @@
-// public/app.js - Todo App V9: Push Notifications
-// 添加推送通知功能
+// public/app.js - Todo App V10: Internationalization
+// 添加中英文切换功能
 
 const DATABASE_URL = 'https://first-ad067-default-rtdb.asia-southeast1.firebasedatabase.app';
 
-// 用户状态
+// ==================== 国际化 ====================
+
+const translations = {
+  zh: {
+    appName: 'Todo App',
+    version: '国际化',
+    welcome: '欢迎',
+    guest: '访客',
+    logout: '退出登录',
+    login: '登录',
+    register: '注册',
+    email: '邮箱',
+    password: '密码',
+    addTodo: '添加待办...',
+    add: '添加',
+    search: '搜索...',
+    clear: '清除',
+    all: '全部',
+    categories: '分类',
+    addCategory: '添加分类',
+    export: '导出',
+    import: '导入',
+    stats: '统计',
+    share: '分享',
+    joinShare: '加入分享',
+    createShare: '创建分享',
+    exitShare: '退出',
+    notifications: '通知',
+    notificationsOn: '通知开',
+    notificationsOff: '通知关',
+    total: '总计',
+    completed: '已完成',
+    pending: '进行中',
+    overdue: '已过期',
+    dueToday: '今天到期',
+    dueThisWeek: '本周到期',
+    byPriority: '按优先级',
+    urgent: '紧急',
+    important: '重要',
+    normal: '一般',
+    delete: '删除',
+    cancel: '取消',
+    confirm: '确认',
+    setDate: '设置截止日期',
+    changeDate: '修改日期',
+    deleteDate: '删除日期',
+    dateFormat: '格式: 2024-12-31',
+    skip: '跳过',
+    enterCode: '输入分享码',
+    shareCode: '分享码',
+    copyLink: '复制链接',
+    shareLinkCopied: '链接已复制',
+    sharedMode: '分享模式',
+    readOnly: '只读模式',
+    emailRegistered: '该邮箱已注册',
+    emailPasswordError: '邮箱或密码错误',
+    pleaseInput: '请输入',
+    addSuccess: '添加成功',
+    deleteSuccess: '删除成功',
+    setDateSuccess: '已设置日期',
+    dateDeleted: '已删除日期',
+    exportSuccess: '已导出',
+    importSuccess: '成功导入',
+    shareCreated: '分享已创建',
+    joinedShare: '已加入分享',
+    exitedShare: '已退出分享',
+    shareFailed: '分享失败',
+    shareNotExist: '分享不存在',
+    shareCodeInvalid: '分享码无效',
+    shareReadOnly: '分享模式只读',
+    notificationsEnabled: '已开启通知',
+    notificationsDisabled: '已关闭通知',
+    notificationsDenied: '通知权限被拒绝',
+    browserNotSupport: '您的浏览器不支持通知',
+    noTodos: '暂无待办',
+    noResults: '未找到匹配的待办',
+    dangerOperation: '危险操作',
+    inputDelete: '输入"删除"确认清空',
+    cancelled: '已取消',
+    clearedAll: '已清空所有数据',
+    clearFailed: '清空失败',
+    exportFailed: '导出失败',
+    importFailed: '导入失败',
+    fileFormatError: '文件格式不正确',
+    overwrite: '覆盖现有数据',
+    append: '追加到现有数据',
+    overdueTask: '已过期',
+    dueTodayTask: '今天',
+    addDate: '加日期',
+    categoryName: '输入分类名称',
+    selectIcon: '选择图标',
+    selectColor: '选择颜色',
+    noTodosYet: '暂无待办',
+    statsOverview: '统计概览',
+    timeReminder: '时间提醒',
+    byCategory: '按分类',
+    enterShareCode: '输入分享码:',
+    shareUrl: '分享链接',
+    language: '语言',
+    chinese: '中文',
+    english: 'English'
+  },
+  en: {
+    appName: 'Todo App',
+    version: 'i18n',
+    welcome: 'Welcome',
+    guest: 'Guest',
+    logout: 'Logout',
+    login: 'Login',
+    register: 'Register',
+    email: 'Email',
+    password: 'Password',
+    addTodo: 'Add todo...',
+    add: 'Add',
+    search: 'Search...',
+    clear: 'Clear',
+    all: 'All',
+    categories: 'Categories',
+    addCategory: 'Add Category',
+    export: 'Export',
+    import: 'Import',
+    stats: 'Stats',
+    share: 'Share',
+    joinShare: 'Join Share',
+    createShare: 'Create Share',
+    exitShare: 'Exit',
+    notifications: 'Notifications',
+    notificationsOn: 'Notif On',
+    notificationsOff: 'Notif Off',
+    total: 'Total',
+    completed: 'Completed',
+    pending: 'Pending',
+    overdue: 'Overdue',
+    dueToday: 'Due Today',
+    dueThisWeek: 'Due This Week',
+    byPriority: 'By Priority',
+    urgent: 'Urgent',
+    important: 'Important',
+    normal: 'Normal',
+    delete: 'Delete',
+    cancel: 'Cancel',
+    confirm: 'Confirm',
+    setDate: 'Set due date',
+    changeDate: 'Change date',
+    deleteDate: 'Delete date',
+    dateFormat: 'Format: 2024-12-31',
+    skip: 'Skip',
+    enterCode: 'Enter share code',
+    shareCode: 'Share Code',
+    copyLink: 'Copy Link',
+    shareLinkCopied: 'Link copied',
+    sharedMode: 'Share Mode',
+    readOnly: 'Read Only',
+    emailRegistered: 'Email already registered',
+    emailPasswordError: 'Email or password error',
+    pleaseInput: 'Please input',
+    addSuccess: 'Added successfully',
+    deleteSuccess: 'Deleted successfully',
+    setDateSuccess: 'Date set',
+    dateDeleted: 'Date deleted',
+    exportSuccess: 'Exported',
+    importSuccess: 'Imported',
+    shareCreated: 'Share created',
+    joinedShare: 'Joined share',
+    exitedShare: 'Exited share',
+    shareFailed: 'Share failed',
+    shareNotExist: 'Share does not exist',
+    shareCodeInvalid: 'Invalid share code',
+    shareReadOnly: 'Share mode is read-only',
+    notificationsEnabled: 'Notifications enabled',
+    notificationsDisabled: 'Notifications disabled',
+    notificationsDenied: 'Notification permission denied',
+    browserNotSupport: 'Browser does not support notifications',
+    noTodos: 'No todos yet',
+    noResults: 'No matching todos',
+    dangerOperation: 'Danger!',
+    inputDelete: 'Type "delete" to confirm',
+    cancelled: 'Cancelled',
+    clearedAll: 'All data cleared',
+    clearFailed: 'Clear failed',
+    exportFailed: 'Export failed',
+    importFailed: 'Import failed',
+    fileFormatError: 'Invalid file format',
+    overwrite: 'Overwrite existing data',
+    append: 'Append to existing data',
+    overdueTask: 'Overdue',
+    dueTodayTask: 'Today',
+    addDate: 'Add date',
+    categoryName: 'Enter category name',
+    selectIcon: 'Select icon',
+    selectColor: 'Select color',
+    noTodosYet: 'No todos yet',
+    statsOverview: 'Statistics',
+    timeReminder: 'Time Reminder',
+    byCategory: 'By Category',
+    enterShareCode: 'Enter share code:',
+    shareUrl: 'Share URL',
+    language: 'Language',
+    chinese: '中文',
+    english: 'English'
+  }
+};
+
+let currentLang = localStorage.getItem('todo_lang') || 'zh';
+
+function t(key) {
+  return translations[currentLang][key] || translations['zh'][key] || key;
+}
+
+function toggleLanguage() {
+  currentLang = currentLang === 'zh' ? 'en' : 'zh';
+  localStorage.setItem('todo_lang', currentLang);
+  showApp();
+  showMessage(currentLang === 'zh' ? '已切换到中文' : 'Switched to English', 'success');
+}
+
+// ==================== 用户状态 ====================
+
 let currentUser = null;
 let authToken = localStorage.getItem('todo_auth_token');
 let userEmail = localStorage.getItem('todo_user_email');
@@ -15,13 +232,13 @@ let showStats = false;
 let currentShareCode = localStorage.getItem('todo_share_code');
 let isSharedMode = false;
 let notificationsEnabled = localStorage.getItem('todo_notifications') === 'true';
-let lastNotificationCheck = localStorage.getItem('todo_last_notification_check');
 
-// 优先级
+// ==================== 优先级 ====================
+
 const PRIORITIES = [
-  { id: 'high', name: '紧急', icon: '🔴', color: '#e74c3c', bgColor: '#fdeaea' },
-  { id: 'medium', name: '重要', icon: '🟡', color: '#f39c12', bgColor: '#fef9e7' },
-  { id: 'low', name: '一般', icon: '🟢', color: '#27ae60', bgColor: '#eafaf1' }
+  { id: 'high', name: t('urgent'), icon: '🔴', color: '#e74c3c', bgColor: '#fdeaea' },
+  { id: 'medium', name: t('important'), icon: '🟡', color: '#f39c12', bgColor: '#fef9e7' },
+  { id: 'low', name: t('normal'), icon: '🟢', color: '#27ae60', bgColor: '#eafaf1' }
 ];
 
 // DOM
@@ -67,26 +284,23 @@ function escapeRegex(string) {
 
 async function requestNotificationPermission() {
   if (!('Notification' in window)) {
-    showMessage('您的浏览器不支持通知', 'error');
+    showMessage(t('browserNotSupport'), 'error');
     return false;
   }
-  
   if (Notification.permission === 'granted') {
     return true;
   }
-  
   if (Notification.permission !== 'denied') {
     const permission = await Notification.requestPermission();
     if (permission === 'granted') {
       notificationsEnabled = true;
       localStorage.setItem('todo_notifications', 'true');
-      showMessage('已开启通知!', 'success');
+      showMessage(t('notificationsEnabled'), 'success');
       updateNotificationUI();
       return true;
     }
   }
-  
-  showMessage('通知权限被拒绝', 'error');
+  showMessage(t('notificationsDenied'), 'error');
   return false;
 }
 
@@ -94,7 +308,7 @@ function toggleNotifications() {
   if (notificationsEnabled) {
     notificationsEnabled = false;
     localStorage.setItem('todo_notifications', 'false');
-    showMessage('已关闭通知', 'success');
+    showMessage(t('notificationsDisabled'), 'success');
   } else {
     requestNotificationPermission();
   }
@@ -104,85 +318,33 @@ function toggleNotifications() {
 function updateNotificationUI() {
   const btn = document.getElementById('notificationBtn');
   if (btn) {
-    if (notificationsEnabled) {
-      btn.innerHTML = '🔔 通知开';
-      btn.className = 'notification-btn enabled';
-    } else {
-      btn.innerHTML = '🔕 通知关';
-      btn.className = 'notification-btn disabled';
-    }
+    btn.innerHTML = notificationsEnabled ? '🔔 ' + t('notificationsOn') : '🔕 ' + t('notificationsOff');
+    btn.className = 'notification-btn ' + (notificationsEnabled ? 'enabled' : 'disabled');
   }
 }
 
 function sendNotification(title, body, icon = '📋') {
   if (!notificationsEnabled || Notification.permission !== 'granted') return;
-  
   try {
-    const notification = new Notification(title, {
-      body: body,
-      icon: icon,
-      badge: icon,
-      tag: 'todo-app',
-      requireInteraction: false,
-      silent: false
-    });
-    
-    notification.onclick = () => {
-      window.focus();
-      notification.close();
-    };
-    
+    const notification = new Notification(title, { body, icon, tag: 'todo-app' });
+    notification.onclick = () => { window.focus(); notification.close(); };
     setTimeout(() => notification.close(), 5000);
-  } catch (e) {
-    console.log('Notification error:', e);
-  }
+  } catch (e) { console.log('Notification error:', e); }
 }
 
 async function checkDueNotifications() {
   if (!authToken || !notificationsEnabled) return;
-  
   const now = new Date().toISOString().split('T')[0];
   const todos = await fetchTodosRaw();
-  
   const overdue = todos.filter(t => t.dueDate && !t.completed && t.dueDate < now);
   const dueToday = todos.filter(t => t.dueDate && !t.completed && t.dueDate === now);
-  
-  // 只在有新的过期/今日到期时通知
   const lastCheck = localStorage.getItem('todo_last_notification_check') || '';
   const today = new Date().toDateString();
-  
   if (lastCheck !== today) {
-    if (overdue.length > 0) {
-      sendNotification('⚠️ 有待办已过期', `您有 ${overdue.length} 条待办已过期`, '🔴');
-    }
-    if (dueToday.length > 0) {
-      sendNotification('📅 今天有待办到期', `您有 ${dueToday.length} 条待办今天到期`, '🟡');
-    }
+    if (overdue.length > 0) sendNotification('⚠️ ' + t('overdue'), `${overdue.length} ${t('overdue')}`, '🔴');
+    if (dueToday.length > 0) sendNotification('📅 ' + t('dueToday'), `${dueToday.length} ${t('dueToday')}`, '🟡');
     localStorage.setItem('todo_last_notification_check', today);
   }
-}
-
-function showInAppNotification(title, message, type = 'info') {
-  const existing = document.querySelector('.in-app-notification');
-  if (existing) existing.remove();
-  
-  const notification = document.createElement('div');
-  notification.className = `in-app-notification ${type}`;
-  notification.innerHTML = `
-    <div class="notification-content">
-      <strong>${title}</strong>
-      <p>${message}</p>
-    </div>
-    <button onclick="this.parentElement.remove()">×</button>
-  `;
-  
-  document.body.appendChild(notification);
-  
-  setTimeout(() => {
-    if (notification.parentElement) {
-      notification.remove();
-    }
-  }, 5000);
 }
 
 // ==================== 用户系统 ====================
@@ -193,7 +355,7 @@ async function register(email, password) {
     const usersData = await checkResponse.json();
     if (usersData) {
       const existingUser = Object.values(usersData).find(u => u.email === email);
-      if (existingUser) throw new Error('该邮箱已注册');
+      if (existingUser) throw new Error(t('emailRegistered'));
     }
     const userId = generateUserId();
     await fetch(`${DATABASE_URL}/users/${userId}.json`, {
@@ -220,7 +382,7 @@ async function login(email, password) {
         break;
       }
     }
-    if (!foundUser) throw new Error('邮箱或密码错误');
+    if (!foundUser) throw new Error(t('emailPasswordError'));
     currentUser = { id: foundUserId, email: foundUser.email };
     authToken = foundUserId;
     userEmail = email;
@@ -230,7 +392,7 @@ async function login(email, password) {
     currentShareCode = null;
     localStorage.removeItem('todo_share_code');
     showApp();
-    showMessage(`欢迎回来，${email}！`, 'success');
+    showMessage(`${t('welcome')}，${email}！`, 'success');
     checkDueNotifications();
   } catch (error) {
     showMessage(error.message, 'error');
@@ -247,39 +409,32 @@ function logout() {
   currentShareCode = null;
   localStorage.removeItem('todo_share_code');
   showLogin();
-  showMessage('已退出登录', 'success');
+  showMessage(t('logout'), 'success');
 }
 
 // ==================== 路径 ====================
 
 function getUserPath() { 
-  if (isSharedMode && currentShareCode) {
-    return `shared_${currentShareCode}`;
-  }
+  if (isSharedMode && currentShareCode) return `shared_${currentShareCode}`;
   return authToken ? `todos_${authToken}` : null; 
 }
 
 function getCategoriesPath() { 
-  if (isSharedMode && currentShareCode) {
-    return `shared_cat_${currentShareCode}`;
-  }
+  if (isSharedMode && currentShareCode) return `shared_cat_${currentShareCode}`;
   return authToken ? `categories_${authToken}` : null; 
 }
 
 // ==================== 分享系统 ====================
 
 async function createShare() {
-  if (!authToken) { showMessage('请先登录', 'error'); return; }
-  
+  if (!authToken) { showMessage(t('pleaseInput') + t('login'), 'error'); return; }
   try {
     const shareCode = generateShareCode();
-    
     await fetch(`${DATABASE_URL}/shared_${shareCode}.json`, {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ todos: [], created: new Date().toISOString(), owner: authToken })
     });
-    
     const cats = await fetchCategories();
     for (const cat of cats) {
       await fetch(`${DATABASE_URL}/shared_cat_${shareCode}/${cat.id}.json`, {
@@ -288,7 +443,6 @@ async function createShare() {
         body: JSON.stringify(cat)
       });
     }
-    
     const todos = await fetchTodosRaw();
     for (const todo of todos) {
       const newTodo = { ...todo };
@@ -299,42 +453,34 @@ async function createShare() {
         body: JSON.stringify(newTodo)
       });
     }
-    
     currentShareCode = shareCode;
     isSharedMode = true;
     localStorage.setItem('todo_share_code', shareCode);
-    
-    const shareUrl = `https://danieldeng978.github.io/my-todo-app/?share=${shareCode}`;
-    
-    if (confirm(`分享码: ${shareCode}\n\n链接: ${shareUrl}\n\n是否复制链接?`)) {
+    const shareUrl = `https://danieldeng978.github.io/my-todo-app/?share=${shareCode}&lang=${currentLang}`;
+    if (confirm(`${t('shareCode')}: ${shareCode}\n\nURL: ${shareUrl}\n\n${t('copyLink')}?`)) {
       navigator.clipboard.writeText(shareUrl);
-      showMessage('链接已复制!', 'success');
+      showMessage(t('shareLinkCopied'), 'success');
     }
-    
     showApp();
   } catch (error) {
-    showMessage('创建分享失败', 'error');
+    showMessage(t('shareFailed'), 'error');
   }
 }
 
 async function joinShare() {
-  const shareCode = prompt('输入分享码:');
+  const shareCode = prompt(t('enterShareCode'));
   if (!shareCode || !shareCode.trim()) return;
-  
   const code = shareCode.trim().toUpperCase();
-  
   try {
     const response = await fetch(`${DATABASE_URL}/shared_${code}.json`);
-    if (!response.ok) throw new Error('分享不存在');
-    
+    if (!response.ok) throw new Error(t('shareNotExist'));
     currentShareCode = code;
     isSharedMode = true;
     localStorage.setItem('todo_share_code', code);
-    
-    showMessage('已加入分享列表!', 'success');
+    showMessage(t('joinedShare'), 'success');
     showApp();
   } catch (error) {
-    showMessage('分享码无效', 'error');
+    showMessage(t('shareCodeInvalid'), 'error');
   }
 }
 
@@ -342,7 +488,7 @@ function exitShare() {
   isSharedMode = false;
   currentShareCode = null;
   localStorage.removeItem('todo_share_code');
-  showMessage('已退出分享模式', 'success');
+  showMessage(t('exitedShare'), 'success');
   showApp();
 }
 
@@ -434,10 +580,10 @@ async function fetchTodos() {
 
 async function addTodo() {
   const title = todoInput.value.trim();
-  if (!title) { showMessage('请输入待办内容', 'error'); return; }
-  if (!authToken && !isSharedMode) { showMessage('请先登录', 'error'); return; }
+  if (!title) { showMessage(t('pleaseInput') + t('addTodo').replace('...', ''), 'error'); return; }
+  if (!authToken && !isSharedMode) { showMessage(t('pleaseInput') + t('login'), 'error'); return; }
   
-  const dueDate = prompt('设置截止日期（格式: 2024-12-31）\n直接回车跳过:', '');
+  const dueDate = prompt(`${t('setDate')} (${t('dateFormat')})\n${t('skip')}:`, '');
   
   try {
     const newTodo = {
@@ -463,7 +609,7 @@ async function addTodo() {
       });
     }
     
-    showMessage('添加成功!', 'success');
+    showMessage(t('addSuccess'), 'success');
     todoInput.value = '';
     fetchTodos();
   } catch (error) {
@@ -474,17 +620,14 @@ async function addTodo() {
 async function toggleTodo(id) {
   try {
     let url = `${DATABASE_URL}/${getUserPath()}`;
-    if (isSharedMode) {
-      url += `/todos/${id}`;
-    } else {
-      url += `/${id}`;
-    }
+    if (isSharedMode) url += `/todos/${id}`;
+    else url += `/${id}`;
+    
     const getResponse = await fetch(url + '.json');
     const todo = await getResponse.json();
     
-    // 完成时发送通知
     if (!todo.completed && notificationsEnabled) {
-      sendNotification('✅ 待办完成', `"${todo.title.slice(0, 20)}..." 已完成`, '🎉');
+      sendNotification('✅ ' + t('completed'), `"${todo.title.slice(0, 20)}..." ${t('completed')}`, '🎉');
     }
     
     await fetch(url, {
@@ -499,13 +642,10 @@ async function toggleTodo(id) {
 }
 
 async function deleteTodo(id) {
-  if (isSharedMode) {
-    showMessage('分享模式只读,不能删除', 'error');
-    return;
-  }
+  if (isSharedMode) { showMessage(t('shareReadOnly'), 'error'); return; }
   try {
     await fetch(`${DATABASE_URL}/${getUserPath()}/${id}.json`, { method: 'DELETE' });
-    showMessage('删除成功!', 'success');
+    showMessage(t('deleteSuccess'), 'success');
     fetchTodos();
   } catch (error) {
     showMessage(error.message, 'error');
@@ -513,34 +653,21 @@ async function deleteTodo(id) {
 }
 
 async function setDueDate(id, currentDate) {
-  const newDate = prompt('设置截止日期（格式: 2024-12-31）\n输入空值删除日期:', currentDate || '');
+  const newDate = prompt(`${t('changeDate')} (${t('dateFormat')})\n${t('deleteDate')}:`, currentDate || '');
   try {
     let url = `${DATABASE_URL}/${getUserPath()}`;
-    if (isSharedMode) {
-      url += `/todos/${id}`;
-    } else {
-      url += `/${id}`;
-    }
+    if (isSharedMode) url += `/todos/${id}`;
+    else url += `/${id}`;
     
     if (newDate === '') {
-      await fetch(url, {
-        method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ dueDate: null })
-      });
-      showMessage('已删除日期', 'success');
+      await fetch(url, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ dueDate: null }) });
+      showMessage(t('dateDeleted'), 'success');
     } else if (newDate) {
-      await fetch(url, {
-        method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ dueDate: newDate })
-      });
-      showMessage('已设置日期', 'success');
-      
-      // 设置日期时提醒
+      await fetch(url, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ dueDate: newDate }) });
+      showMessage(t('setDateSuccess'), 'success');
       const today = new Date().toISOString().split('T')[0];
       if (newDate === today && notificationsEnabled) {
-        sendNotification('📅 截知提醒已设置', `今天到期: ${newDate}`, '🟡');
+        sendNotification('📅 ' + t('dueToday'), `${t('dueToday')}: ${newDate}`, '🟡');
       }
     }
     fetchTodos();
@@ -553,7 +680,6 @@ async function setDueDate(id, currentDate) {
 
 async function getStats() {
   const todos = await fetchTodosRaw();
-  
   const stats = {
     total: todos.length,
     completed: todos.filter(t => t.completed).length,
@@ -568,74 +694,60 @@ async function getStats() {
     dueToday: todos.filter(t => t.dueDate && !t.completed && t.dueDate === new Date().toISOString().split('T')[0]).length,
     dueThisWeek: 0
   };
-  
   const today = new Date();
   const weekEnd = new Date(today);
   weekEnd.setDate(weekEnd.getDate() + 7);
-  
   todos.filter(t => t.dueDate && !t.completed).forEach(t => {
     if (t.dueDate >= new Date().toISOString().split('T')[0] && t.dueDate <= weekEnd.toISOString().split('T')[0]) {
       stats.dueThisWeek++;
     }
   });
-  
   categories.forEach(cat => {
     stats.byCategory[cat.id] = todos.filter(t => t.category === cat.id).length;
   });
-  
   return stats;
 }
 
 async function toggleStats() {
   showStats = !showStats;
-  if (showStats) {
-    renderStats();
-  } else {
-    hideStats();
-  }
+  if (showStats) renderStats();
+  else hideStats();
 }
 
 async function renderStats() {
   const existing = document.querySelector('.stats-dashboard');
   if (existing) existing.remove();
-  
   const stats = await getStats();
-  
   const dashboard = document.createElement('div');
   dashboard.className = 'stats-dashboard';
-  
   dashboard.innerHTML = `
     <div class="stats-header">
-      <h3>📊 统计概览</h3>
+      <h3>📊 ${t('statsOverview')}</h3>
       <button onclick="toggleStats()" class="close-stats">×</button>
     </div>
-    
     <div class="stats-grid">
-      <div class="stat-card total"><div class="stat-number">${stats.total}</div><div class="stat-label">总计</div></div>
-      <div class="stat-card completed"><div class="stat-number">${stats.completed}</div><div class="stat-label">已完成</div></div>
-      <div class="stat-card pending"><div class="stat-number">${stats.pending}</div><div class="stat-label">进行中</div></div>
-      <div class="stat-card overdue"><div class="stat-number">${stats.overdue}</div><div class="stat-label">已过期</div></div>
+      <div class="stat-card total"><div class="stat-number">${stats.total}</div><div class="stat-label">${t('total')}</div></div>
+      <div class="stat-card completed"><div class="stat-number">${stats.completed}</div><div class="stat-label">${t('completed')}</div></div>
+      <div class="stat-card pending"><div class="stat-number">${stats.pending}</div><div class="stat-label">${t('pending')}</div></div>
+      <div class="stat-card overdue"><div class="stat-number">${stats.overdue}</div><div class="stat-label">${t('overdue')}</div></div>
     </div>
-    
     <div class="stats-section">
-      <h4>🔴 按优先级</h4>
+      <h4>🔴 ${t('byPriority')}</h4>
       <div class="priority-bars">
-        <div class="bar-row"><span class="bar-label">🔴 紧急</span><div class="bar-bg"><div class="bar-fill high" style="width:${stats.total ? (stats.byPriority.high / stats.total * 100) : 0}%"></div></div><span class="bar-count">${stats.byPriority.high}</span></div>
-        <div class="bar-row"><span class="bar-label">🟡 重要</span><div class="bar-bg"><div class="bar-fill medium" style="width:${stats.total ? (stats.byPriority.medium / stats.total * 100) : 0}%"></div></div><span class="bar-count">${stats.byPriority.medium}</span></div>
-        <div class="bar-row"><span class="bar-label">🟢 一般</span><div class="bar-bg"><div class="bar-fill low" style="width:${stats.total ? (stats.byPriority.low / stats.total * 100) : 0}%"></div></div><span class="bar-count">${stats.byPriority.low}</span></div>
+        <div class="bar-row"><span class="bar-label">🔴 ${t('urgent')}</span><div class="bar-bg"><div class="bar-fill high" style="width:${stats.total ? (stats.byPriority.high / stats.total * 100) : 0}%"></div></div><span class="bar-count">${stats.byPriority.high}</span></div>
+        <div class="bar-row"><span class="bar-label">🟡 ${t('important')}</span><div class="bar-bg"><div class="bar-fill medium" style="width:${stats.total ? (stats.byPriority.medium / stats.total * 100) : 0}%"></div></div><span class="bar-count">${stats.byPriority.medium}</span></div>
+        <div class="bar-row"><span class="bar-label">🟢 ${t('normal')}</span><div class="bar-bg"><div class="bar-fill low" style="width:${stats.total ? (stats.byPriority.low / stats.total * 100) : 0}%"></div></div><span class="bar-count">${stats.byPriority.low}</span></div>
       </div>
     </div>
-    
     <div class="stats-section">
-      <h4>📅 时间提醒</h4>
+      <h4>📅 ${t('timeReminder')}</h4>
       <div class="time-alerts">
-        <div class="alert-item overdue"><span>🔴 已过期</span><strong>${stats.overdue}</strong></div>
-        <div class="alert-item today"><span>🟡 今天到期</span><strong>${stats.dueToday}</strong></div>
-        <div class="alert-item week"><span>📆 本周到期</span><strong>${stats.dueThisWeek}</strong></div>
+        <div class="alert-item overdue"><span>🔴 ${t('overdue')}</span><strong>${stats.overdue}</strong></div>
+        <div class="alert-item today"><span>🟡 ${t('dueToday')}</span><strong>${stats.dueToday}</strong></div>
+        <div class="alert-item week"><span>📆 ${t('dueThisWeek')}</span><strong>${stats.dueThisWeek}</strong></div>
       </div>
     </div>
   `;
-  
   document.querySelector('.container').prepend(dashboard);
 }
 
@@ -652,7 +764,7 @@ async function exportData() {
     const todos = await fetchTodosRaw();
     const cats = await fetchCategories();
     const exportData = {
-      version: 'V9',
+      version: 'V10',
       exportDate: new Date().toISOString(),
       userEmail: userEmail,
       todos: todos,
@@ -665,9 +777,9 @@ async function exportData() {
     a.download = `todo-backup-${new Date().toISOString().split('T')[0]}.json`;
     a.click();
     URL.revokeObjectURL(url);
-    showMessage(`已导出 ${todos.length} 条待办`, 'success');
+    showMessage(`${t('exportSuccess')} ${todos.length} ${t('total')}`, 'success');
   } catch (error) {
-    showMessage('导出失败', 'error');
+    showMessage(t('exportFailed'), 'error');
   }
 }
 
@@ -682,8 +794,8 @@ async function importData() {
     try {
       const text = await file.text();
       const data = JSON.parse(text);
-      if (!data.todos || !Array.isArray(data.todos)) throw new Error('文件格式不正确');
-      const overwrite = confirm(`将导入 ${data.todos.length} 条待办\n\n"确定"覆盖,"取消"追加`);
+      if (!data.todos || !Array.isArray(data.todos)) throw new Error(t('fileFormatError'));
+      const overwrite = confirm(`Import ${data.todos.length} todos\n\nOK=${t('overwrite')}, Cancel=${t('append')}`);
       if (overwrite) {
         const existingTodos = await fetchTodosRaw();
         for (const todo of existingTodos) {
@@ -707,11 +819,11 @@ async function importData() {
         });
         imported++;
       }
-      showMessage(`成功导入 ${imported} 条待办`, 'success');
+      showMessage(`${t('importSuccess')} ${imported} ${t('total')}`, 'success');
       loadCategories();
       fetchTodos();
     } catch (error) {
-      showMessage('导入失败: ' + error.message, 'error');
+      showMessage(t('importFailed') + ': ' + error.message, 'error');
     }
   };
   input.click();
@@ -731,7 +843,7 @@ function renderSearchResults() {
   if (searchQuery) {
     const info = document.createElement('div');
     info.className = 'search-results-info';
-    info.innerHTML = `🔍 搜索: <strong>"${escapeHtml(searchQuery)}"</strong> <button onclick="clearSearch()">清除</button>`;
+    info.innerHTML = `🔍 ${t('search')}: <strong>"${escapeHtml(searchQuery)}"</strong> <button onclick="clearSearch()">${t('clear')}</button>`;
     document.querySelector('.input-section').before(info);
   }
 }
@@ -751,7 +863,7 @@ function renderTodos(todos) {
   if (!authToken && !isSharedMode) return;
   
   if (todos.length === 0) {
-    todoList.innerHTML = `<li class="empty-state"><span>📋</span><p>${searchQuery ? '未找到匹配的待办' : '暂无待办'}</p></li>`;
+    todoList.innerHTML = `<li class="empty-state"><span>📋</span><p>${searchQuery ? t('noResults') : t('noTodosYet')}</p></li>`;
     return;
   }
   
@@ -766,9 +878,9 @@ function renderTodos(todos) {
     if (todo.dueDate && !todo.completed) {
       if (todo.dueDate < today) {
         overdueClass = 'overdue';
-        overdueText = '🔴 已过期';
+        overdueText = '🔴 ' + t('overdueTask');
       } else if (todo.dueDate === today) {
-        overdueText = '🟡 今天';
+        overdueText = '🟡 ' + t('dueTodayTask');
       }
     }
     
@@ -779,10 +891,10 @@ function renderTodos(todos) {
     li.innerHTML = `
       <input type="checkbox" class="todo-checkbox" ${todo.completed ? 'checked' : ''} onchange="toggleTodo('${todo.id}')">
       <span class="todo-text">${highlightMatch(escapeHtml(todo.title), searchQuery)}</span>
-      ${todo.dueDate ? `<span class="todo-date" onclick="setDueDate('${todo.id}', '${todo.dueDate}')">📅 ${todo.dueDate} ${overdueText}</span>` : `<span class="todo-date add-date" onclick="setDueDate('${todo.id}')">➕ 加日期</span>`}
+      ${todo.dueDate ? `<span class="todo-date" onclick="setDueDate('${todo.id}', '${todo.dueDate}')">📅 ${todo.dueDate} ${overdueText}</span>` : `<span class="todo-date add-date" onclick="setDueDate('${todo.id}')">➕ ${t('addDate')}</span>`}
       <span class="todo-priority" style="background:${priority.bgColor};color:${priority.color}">${priority.icon} ${priority.name}</span>
       ${cat ? `<span class="todo-category" style="background:${cat.color}20;color:${cat.color}">${cat.icon} ${cat.name}</span>` : ''}
-      ${!isSharedMode ? `<button class="delete-btn" onclick="deleteTodo('${todo.id}')">删除</button>` : ''}
+      ${!isSharedMode ? `<button class="delete-btn" onclick="deleteTodo('${todo.id}')">${t('delete')}</button>` : ''}
     `;
     todoList.appendChild(li);
   });
@@ -822,14 +934,14 @@ function renderCategoryTabs() {
   
   const tabs = document.createElement('div');
   tabs.className = 'category-tabs';
-  tabs.innerHTML = `<div class="category-tab ${currentCategory === 'all' ? 'active' : ''}" onclick="switchCategory('all')">📋 全部</div>`;
+  tabs.innerHTML = `<div class="category-tab ${currentCategory === 'all' ? 'active' : ''}" onclick="switchCategory('all')">📋 ${t('all')}</div>`;
   
   categories.forEach(cat => {
     tabs.innerHTML += `<div class="category-tab ${currentCategory === cat.id ? 'active' : ''}" onclick="switchCategory('${cat.id}')" style="${currentCategory === cat.id ? `background:${cat.color}20;border-color:${cat.color}` : ''}">${cat.icon} ${cat.name}${!isSharedMode ? `<span class="delete-cat" onclick="event.stopPropagation(); deleteCategory('${cat.id}')">×</span>` : ''}</div>`;
   });
   
   if (!isSharedMode) {
-    tabs.innerHTML += `<div class="category-tab add-cat" onclick="showAddCategory()">➕ 添加分类</div>`;
+    tabs.innerHTML += `<div class="category-tab add-cat" onclick="showAddCategory()">➕ ${t('addCategory')}</div>`;
   }
   document.querySelector('.input-section').before(tabs);
 }
@@ -840,7 +952,7 @@ function renderPriorityTabs() {
   
   const tabs = document.createElement('div');
   tabs.className = 'priority-tabs';
-  tabs.innerHTML = `<div class="priority-tab ${currentPriority === 'all' ? 'active' : ''}" onclick="switchPriority('all')">🎯 全部</div>`;
+  tabs.innerHTML = `<div class="priority-tab ${currentPriority === 'all' ? 'active' : ''}" onclick="switchPriority('all')">🎯 ${t('all')}</div>`;
   
   PRIORITIES.forEach(p => {
     tabs.innerHTML += `<div class="priority-tab ${currentPriority === p.id ? 'active' : ''}" onclick="switchPriority('${p.id}')" style="${currentPriority === p.id ? `background:${p.bgColor};border-color:${p.color};color:${p.color}` : ''}">${p.icon} ${p.name}</div>`;
@@ -861,26 +973,29 @@ function switchPriority(priority) {
 }
 
 function showAddCategory() {
-  const name = prompt('输入分类名称:');
+  const name = prompt(t('categoryName') + ':');
   if (name && name.trim()) {
     const icons = ['💼', '🏠', '📚', '🎯', '💪', '🎮', '🎵', '🍔'];
-    const icon = prompt(`选择图标(1-8):\n${icons.map((ic, i) => `${i+1}. ${ic}`).join('\n')}:`, '1');
+    const icon = prompt(`${t('selectIcon')}(1-8):\n${icons.map((ic, i) => `${i+1}. ${ic}`).join('\n')}:`, '1');
     const colors = ['#e74c3c', '#3498db', '#27ae60', '#f39c12', '#9b59b6', '#1abc9c'];
-    const color = prompt(`选择颜色(1-6):\n${colors.map((c, i) => `${i+1}. ${c}`).join('\n')}:`, '1');
+    const color = prompt(`${t('selectColor')}(1-6):\n${colors.map((c, i) => `${i+1}. ${c}`).join('\n')}:`, '1');
     addCategory(name.trim(), icons[parseInt(icon) - 1] || '📁', colors[parseInt(color) - 1] || '#667eea');
   }
 }
 
 function showLogin() {
   document.querySelector('header').innerHTML = `
-    <h1>📝 Todo App</h1>
-    <p>V9: 推送通知</p>
+    <h1>📝 ${t('appName')}</h1>
+    <p>🌍 ${t('version')}</p>
+    <div class="lang-toggle">
+      <button onclick="toggleLanguage()" class="lang-btn">${currentLang === 'zh' ? '🇨🇳 中文' : '🇺🇸 English'}</button>
+    </div>
     <div class="auth-form">
-      <input type="email" id="authEmail" placeholder="邮箱">
-      <input type="password" id="authPassword" placeholder="密码">
+      <input type="email" id="authEmail" placeholder="${t('email')}">
+      <input type="password" id="authPassword" placeholder="${t('password')}">
       <div class="auth-buttons">
-        <button onclick="handleAuth('login')">登录</button>
-        <button onclick="handleAuth('register')" class="secondary">注册</button>
+        <button onclick="handleAuth('login')">${t('login')}</button>
+        <button onclick="handleAuth('register')" class="secondary">${t('register')}</button>
       </div>
     </div>
   `;
@@ -891,43 +1006,55 @@ function showLogin() {
 }
 
 function showApp() {
-  const searchHTML = `<div class="search-box"><input type="text" id="searchInput" placeholder="🔍 搜索待办..." oninput="performSearch(this.value)"></div>`;
+  // Update priorities with translations
+  PRIORITIES[0].name = t('urgent');
+  PRIORITIES[1].name = t('important');
+  PRIORITIES[2].name = t('normal');
+  
+  const searchHTML = `<div class="search-box"><input type="text" id="searchInput" placeholder="🔍 ${t('search')}" oninput="performSearch(this.value)"></div>`;
   
   let shareHTML = '';
   if (isSharedMode) {
     shareHTML = `
       <div class="share-mode-banner">
-        <span>🤝 分享模式: ${currentShareCode}</span>
-        <button onclick="exitShare()" class="exit-share-btn">退出</button>
+        <span>🤝 ${t('sharedMode')}: ${currentShareCode}</span>
+        <button onclick="exitShare()" class="exit-share-btn">${t('exitShare')}</button>
       </div>
     `;
   } else if (authToken) {
     shareHTML = `
       <div class="share-bar">
-        <button onclick="createShare()" class="share-btn">🔗 创建分享</button>
-        <button onclick="joinShare()" class="join-btn">🤝 加入分享</button>
+        <button onclick="createShare()" class="share-btn">🔗 ${t('createShare')}</button>
+        <button onclick="joinShare()" class="join-btn">🤝 ${t('joinShare')}</button>
       </div>
     `;
   }
   
   const exportHTML = !isSharedMode ? `
     <div class="export-import-bar">
-      <button onclick="exportData()" class="export-btn">📤 导出</button>
-      <button onclick="importData()" class="import-btn">📥 导入</button>
-      <button onclick="toggleStats()" class="stats-btn">📊 统计</button>
-      <button onclick="toggleNotifications()" id="notificationBtn" class="notification-btn ${notificationsEnabled ? 'enabled' : 'disabled'}">${notificationsEnabled ? '🔔 通知开' : '🔕 通知关'}</button>
+      <button onclick="exportData()" class="export-btn">📤 ${t('export')}</button>
+      <button onclick="importData()" class="import-btn">📥 ${t('import')}</button>
+      <button onclick="toggleStats()" class="stats-btn">📊 ${t('stats')}</button>
+      <button onclick="toggleNotifications()" id="notificationBtn" class="notification-btn ${notificationsEnabled ? 'enabled' : 'disabled'}">${notificationsEnabled ? '🔔 ' + t('notificationsOn') : '🔕 ' + t('notificationsOff')}</button>
     </div>
   ` : `
     <div class="export-import-bar">
-      <button onclick="toggleStats()" class="stats-btn">📊 统计</button>
+      <button onclick="toggleStats()" class="stats-btn">📊 ${t('stats')}</button>
     </div>
   `;
   
   document.querySelector('header').innerHTML = `
-    <h1>📝 Todo App</h1>
-    <p>欢迎，${userEmail || '访客'}</p>
-    ${authToken && !isSharedMode ? `<button onclick="logout()" class="logout-btn">退出登录</button>` : ''}
-    <p style="font-size: 12px; color: #888; margin-top: 5px;">🔔 V9: 推送通知</p>
+    <div class="header-top">
+      <div>
+        <h1>📝 ${t('appName')}</h1>
+        <p>${t('welcome')}，${userEmail || t('guest')}</p>
+      </div>
+      <div class="header-actions">
+        <button onclick="toggleLanguage()" class="lang-btn-sm">🌍 ${currentLang === 'zh' ? '中文' : 'EN'}</button>
+        ${authToken && !isSharedMode ? `<button onclick="logout()" class="logout-btn">${t('logout')}</button>` : ''}
+      </div>
+    </div>
+    <p style="font-size: 12px; color: #888; margin-top: 5px;">🌍 V10: ${t('version')}</p>
     ${shareHTML}
     ${searchHTML}
     ${exportHTML}
@@ -938,7 +1065,7 @@ function showApp() {
 async function handleAuth(action) {
   const email = document.getElementById('authEmail').value.trim();
   const password = document.getElementById('authPassword').value;
-  if (!email || !password) { showMessage('请输入邮箱和密码', 'error'); return; }
+  if (!email || !password) { showMessage(t('pleaseInput') + t('email') + ' ' + t('password'), 'error'); return; }
   if (action === 'login') await login(email, password);
   else await register(email, password);
 }
@@ -948,12 +1075,18 @@ async function handleAuth(action) {
 async function init() {
   const urlParams = new URLSearchParams(window.location.search);
   const shareCode = urlParams.get('share');
+  const langParam = urlParams.get('lang');
+  
+  if (langParam && (langParam === 'zh' || langParam === 'en')) {
+    currentLang = langParam;
+    localStorage.setItem('todo_lang', currentLang);
+  }
   
   if (shareCode) {
     currentShareCode = shareCode.toUpperCase();
     isSharedMode = true;
     localStorage.setItem('todo_share_code', currentShareCode);
-    showMessage('已加入分享!', 'success');
+    showMessage(t('joinedShare'), 'success');
   }
   
   if (authToken && userEmail) {
@@ -965,7 +1098,6 @@ async function init() {
     showLogin();
   }
   
-  // 页面可见性变化时检查通知
   document.addEventListener('visibilitychange', () => {
     if (document.visibilityState === 'visible' && authToken) {
       checkDueNotifications();
@@ -996,6 +1128,7 @@ window.exportData = exportData;
 window.importData = importData;
 window.toggleStats = toggleStats;
 window.toggleNotifications = toggleNotifications;
+window.toggleLanguage = toggleLanguage;
 window.createShare = createShare;
 window.joinShare = joinShare;
 window.exitShare = exitShare;
