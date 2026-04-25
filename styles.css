@@ -432,6 +432,51 @@ button:hover {
   border-radius: 2px;
 }
 
+/* 导出导入工具栏 */
+.export-import-bar {
+  display: flex;
+  gap: 8px;
+  margin-top: 10px;
+  margin-bottom: 10px;
+}
+
+.export-import-bar button {
+  flex: 1;
+  padding: 10px;
+  border: none;
+  border-radius: 8px;
+  font-size: 13px;
+  cursor: pointer;
+  font-weight: 500;
+}
+
+.export-btn {
+  background: #27ae60;
+  color: white;
+}
+
+.export-btn:hover {
+  background: #219a52;
+}
+
+.import-btn {
+  background: #3498db;
+  color: white;
+}
+
+.import-btn:hover {
+  background: #2980b9;
+}
+
+.clear-btn {
+  background: #e74c3c;
+  color: white;
+}
+
+.clear-btn:hover {
+  background: #c0392b;
+}
+
 /* 登出按钮 */
 .logout-btn {
   background: #dc3545 !important;

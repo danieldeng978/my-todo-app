@@ -1,5 +1,5 @@
-// public/app.js - Todo App V5: Search
-// 添加搜索功能
+// public/app.js - Todo App V6: Export/Import
+// 添加数据导出/导入功能
 
 const DATABASE_URL = 'https://first-ad067-default-rtdb.asia-southeast1.firebasedatabase.app';
 
@@ -42,6 +42,16 @@ function hashPassword(password) {
 
 function generateUserId() {
   return 'user_' + Date.now().toString(36) + Math.random().toString(36).substr(2, 9);
+}
+
+function escapeHtml(text) {
+  const div = document.createElement('div');
+  div.textContent = text;
+  return div.innerHTML;
+}
+
+function escapeRegex(string) {
+  return string.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 }
 
 // ==================== 用户系统 ====================
@@ -159,22 +169,14 @@ async function fetchTodos() {
   if (!authToken) return [];
   let todos = await fetchTodosRaw();
   
-  // 搜索过滤
   if (searchQuery) {
     const query = searchQuery.toLowerCase();
-    todos = todos.filter(t => 
-      t.title.toLowerCase().includes(query) ||
-      (t.dueDate && t.dueDate.includes(query))
-    );
+    todos = todos.filter(t => t.title.toLowerCase().includes(query) || (t.dueDate && t.dueDate.includes(query)));
   }
   
-  // 分类过滤
   if (currentCategory !== 'all') todos = todos.filter(t => t.category === currentCategory);
-  
-  // 优先级过滤
   if (currentPriority !== 'all') todos = todos.filter(t => t.priority === currentPriority);
   
-  // 排序
   todos.sort((a, b) => {
     if (a.dueDate && !b.dueDate) return -1;
     if (!a.dueDate && b.dueDate) return 1;
@@ -186,7 +188,6 @@ async function fetchTodos() {
   
   renderTodos(todos);
   
-  // 统计（基于所有数据，不过滤搜索）
   const allTodos = await fetchTodosRaw();
   updateStats(allTodos.filter(t => 
     (currentCategory === 'all' || t.category === currentCategory) &&
@@ -275,6 +276,125 @@ async function setDueDate(id, currentDate) {
   }
 }
 
+// ==================== 导出/导入功能 ====================
+
+async function exportData() {
+  if (!authToken) return;
+  
+  try {
+    const todos = await fetchTodosRaw();
+    const cats = await fetchCategories();
+    
+    const exportData = {
+      version: 'V6',
+      exportDate: new Date().toISOString(),
+      userEmail: userEmail,
+      todos: todos,
+      categories: cats
+    };
+    
+    const blob = new Blob([JSON.stringify(exportData, null, 2)], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `todo-backup-${new Date().toISOString().split('T')[0]}.json`;
+    a.click();
+    URL.revokeObjectURL(url);
+    
+    showMessage(`已导出 ${todos.length} 条待办`, 'success');
+  } catch (error) {
+    showMessage('导出失败', 'error');
+  }
+}
+
+async function importData() {
+  if (!authToken) return;
+  
+  const input = document.createElement('input');
+  input.type = 'file';
+  input.accept = '.json';
+  
+  input.onchange = async (e) => {
+    const file = e.target.files[0];
+    if (!file) return;
+    
+    try {
+      const text = await file.text();
+      const data = JSON.parse(text);
+      
+      if (!data.todos || !Array.isArray(data.todos)) {
+        throw new Error('文件格式不正确');
+      }
+      
+      const overwrite = confirm(`将导入 ${data.todos.length} 条待办\n\n选择"确定"覆盖现有数据，"取消"则追加到现有数据`);
+      
+      if (overwrite) {
+        // 删除现有数据
+        const existingTodos = await fetchTodosRaw();
+        for (const todo of existingTodos) {
+          await fetch(`${DATABASE_URL}/${getUserPath()}/${todo.id}.json`, { method: 'DELETE' });
+        }
+      }
+      
+      // 导入新数据
+      let imported = 0;
+      for (const todo of data.todos) {
+        const newTodo = {
+          title: todo.title,
+          completed: todo.completed || false,
+          created_at: todo.created_at || new Date().toISOString(),
+          category: todo.category || null,
+          priority: todo.priority || 'medium',
+          dueDate: todo.dueDate || null
+        };
+        
+        await fetch(`${DATABASE_URL}/${getUserPath()}.json`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(newTodo)
+        });
+        imported++;
+      }
+      
+      showMessage(`成功导入 ${imported} 条待办`, 'success');
+      loadCategories();
+      fetchTodos();
+    } catch (error) {
+      showMessage('导入失败: ' + error.message, 'error');
+    }
+  };
+  
+  input.click();
+}
+
+async function clearAllData() {
+  if (!authToken) return;
+  
+  const confirm = prompt('危险操作！\n\n输入"删除"确认清空所有数据:');
+  if (confirm !== '删除') {
+    showMessage('已取消', 'error');
+    return;
+  }
+  
+  try {
+    const todos = await fetchTodosRaw();
+    for (const todo of todos) {
+      await fetch(`${DATABASE_URL}/${getUserPath()}/${todo.id}.json`, { method: 'DELETE' });
+    }
+    
+    const cats = await fetchCategories();
+    for (const cat of cats) {
+      await fetch(`${DATABASE_URL}/${getCategoriesPath()}/${cat.id}.json`, { method: 'DELETE' });
+    }
+    
+    showMessage('已清空所有数据', 'success');
+    loadCategories();
+    fetchTodos();
+  } catch (error) {
+    showMessage('清空失败', 'error');
+  }
+}
+
 // ==================== 搜索 ====================
 
 function performSearch(query) {
@@ -353,10 +473,6 @@ function highlightMatch(text, query) {
   return text.replace(regex, '<mark>$1</mark>');
 }
 
-function escapeRegex(string) {
-  return string.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-}
-
 function updateStats(todos) {
   totalCount.textContent = todos.length;
   completedCount.textContent = todos.filter(t => t.completed).length;
@@ -367,18 +483,6 @@ function showMessage(text, type) {
   messageEl.textContent = text;
   messageEl.className = `message ${type}`;
   setTimeout(() => { messageEl.textContent = ''; messageEl.className = 'message'; }, 3000);
-}
-
-// 网络错误处理
-function handleNetworkError(error) {
-  console.error('Network error:', error);
-  showMessage('网络连接失败，请检查网络后刷新重试', 'error');
-}
-
-function escapeHtml(text) {
-  const div = document.createElement('div');
-  div.textContent = text;
-  return div.innerHTML;
 }
 
 // ==================== UI ====================
@@ -447,7 +551,7 @@ function showAddCategory() {
 function showLogin() {
   document.querySelector('header').innerHTML = `
     <h1>📝 Todo App</h1>
-    <p>V5: 搜索功能</p>
+    <p>V6: 导出/导入</p>
     <div class="auth-form">
       <input type="email" id="authEmail" placeholder="邮箱">
       <input type="password" id="authPassword" placeholder="密码">
@@ -464,10 +568,12 @@ function showLogin() {
 }
 
 function showApp() {
-  // 添加搜索框
-  const searchHTML = `
-    <div class="search-box">
-      <input type="text" id="searchInput" placeholder="🔍 搜索待办..." oninput="performSearch(this.value)">
+  const searchHTML = `<div class="search-box"><input type="text" id="searchInput" placeholder="🔍 搜索待办..." oninput="performSearch(this.value)"></div>`;
+  const exportHTML = `
+    <div class="export-import-bar">
+      <button onclick="exportData()" class="export-btn">📤 导出</button>
+      <button onclick="importData()" class="import-btn">📥 导入</button>
+      <button onclick="clearAllData()" class="clear-btn">🗑️ 清空</button>
     </div>
   `;
   
@@ -475,8 +581,9 @@ function showApp() {
     <h1>📝 Todo App</h1>
     <p>欢迎，${userEmail}</p>
     <button onclick="logout()" class="logout-btn">退出登录</button>
-    <p style="font-size: 12px; color: #888; margin-top: 5px;">🔍 V5: 搜索功能</p>
+    <p style="font-size: 12px; color: #888; margin-top: 5px;">📤 V6: 导出/导入</p>
     ${searchHTML}
+    ${exportHTML}
   `;
   loadCategories();
 }
@@ -517,3 +624,6 @@ window.switchCategory = switchCategory;
 window.switchPriority = switchPriority;
 window.deleteCategory = deleteCategory;
 window.showAddCategory = showAddCategory;
+window.exportData = exportData;
+window.importData = importData;
+window.clearAllData = clearAllData;
