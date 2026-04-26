@@ -280,54 +280,61 @@ function doSpeak(text) {
 }
 
 async function processVoiceCommand(transcript) {
-  showVoiceStatus(currentLang === 'zh' ? 'AI思考中...' : 'AI thinking...', 'listening');
+  console.log('processVoiceCommand:', transcript);
+  transcript = transcript.toLowerCase().trim();
   
-  // 添加到对话历史
-  aiConversationHistory.push({ role: 'user', content: transcript });
+  // 简单命令解析 - 直接执行
+  const zhAddPatterns = ['添加待办', '加待办', '新建待办', '创建待办'];
+  const enAddPatterns = ['add todo', 'add a todo', 'create todo', 'new todo'];
   
-  const response = await callOpenAI(transcript);
+  let title = null;
   
-  if (!response) {
-    speakWithMiniMaxTTS(currentLang === 'zh' ? '抱歉，服务暂时不可用' : 'Sorry, service unavailable');
+  // 尝试中文模式
+  for (const p of zhAddPatterns) {
+    if (transcript.includes(p)) {
+      title = transcript.split(p).pop().trim();
+      break;
+    }
+  }
+  
+  // 尝试英文模式
+  if (!title) {
+    for (const p of enAddPatterns) {
+      if (transcript.includes(p)) {
+        const parts = transcript.split(p);
+        title = parts[parts.length - 1].trim();
+        break;
+      }
+    }
+  }
+  
+  // 如果找到标题，直接添加
+  if (title && title.length > 0) {
+    console.log('Adding todo:', title);
+    await addTodoByVoice(title);
+    const msg = currentLang === 'zh' ? `已添加：${title}` : `Added: ${title}`;
+    speakWithMiniMaxTTS(msg);
+    showVoiceStatus(msg, 'success');
     return;
   }
   
-  // 尝试解析JSON命令
-  try {
-    if (response.includes('action')) {
-      const jsonMatch = response.match(/\{.*\}/s);
-      if (jsonMatch) {
-        const cmd = JSON.parse(jsonMatch[0]);
-        if (cmd.action === 'add') {
-          await addTodoByVoice(cmd.title);
-          speakWithMiniMaxTTS(currentLang === 'zh' ? `已添加待办：${cmd.title}` : `Added: ${cmd.title}`);
-          aiConversationHistory.push({ role: 'assistant', content: response });
-          return;
-        } else if (cmd.action === 'show') {
-          await showTodosByVoice();
-          aiConversationHistory.push({ role: 'assistant', content: response });
-          return;
-        } else if (cmd.action === 'delete') {
-          speakWithMiniMaxTTS(currentLang === 'zh' ? '删除功能需要手动操作' : 'Delete requires manual操作');
-          aiConversationHistory.push({ role: 'assistant', content: response });
-          return;
-        }
-      }
-    }
-  } catch (e) {
-    // 不是JSON，用作对话回复
+  // 如果是显示命令
+  if (transcript.includes('显示') || transcript.includes('查看') || 
+      transcript.includes('show') || transcript.includes('list') ||
+      transcript.includes('我的待办') || transcript.includes('my todo')) {
+    await showTodosByVoice();
+    return;
   }
   
-  // 对话回复
-  aiConversationHistory.push({ role: 'assistant', content: response });
-  
-  // 限制历史长度
-  if (aiConversationHistory.length > 10) {
-    aiConversationHistory = aiConversationHistory.slice(-10);
+  // 其他命令交给AI处理
+  showVoiceStatus(currentLang === 'zh' ? 'AI思考中...' : 'Thinking...', 'listening');
+  const response = await callOpenAI(transcript);
+  if (response) {
+    speakWithMiniMaxTTS(response);
+    showVoiceStatus(response.substring(0, 50), 'success');
+  } else {
+    speakWithMiniMaxTTS(currentLang === 'zh' ? '抱歉，服务暂不可用' : 'Sorry, service unavailable');
   }
-  
-  speakWithMiniMaxTTS(response);
-  showVoiceStatus(response.substring(0, 50), 'success');
 }
 
 async function addTodoByVoice(title) {
