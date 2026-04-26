@@ -214,15 +214,11 @@ async function callOpenAI(text) {
       body: JSON.stringify({
         model: 'openclaw',
         messages: [
-          { role: 'system', content: `你是Todo App的AI语音助手。用户会用语音和你对话。你需要：
-1. 理解用户意图（添加待办、查看待办、一般对话等）
-2. 如果是待办相关操作，返回JSON格式命令：
-   - 添加待办: {"action":"add","title":"待办内容","priority":"medium"}
-   - 查看待办: {"action":"show"}
-   - 删除待办: {"action":"delete","title":"待办内容"}
-3. 如果是一般对话，用自然语言回复
-4. 回复要简短（50字以内），适合语音播报
-5. 使用用户相同的语言回复` },
+          { role: 'system', content: `你是Todo App语音助手。规则：
+1. 用户要添加待办 → 直接返回{"action":"add","title":"具体内容"}
+2. 用户要查看待办 → 返回{"action":"show"}
+3. 普通对话 → 直接回复简短文字（20字内）
+4. 不要问问题，直接执行` },
           ...aiConversationHistory,
           { role: 'user', content: text }
         ],
@@ -299,7 +295,7 @@ async function processVoiceCommand(transcript) {
   // 尝试解析JSON命令
   try {
     if (response.includes('{"action"')) {
-      const jsonMatch = response.match(/\{[^{}]+\}/);
+      const jsonMatch = response.match(/\{.*\}/s);
       if (jsonMatch) {
         const cmd = JSON.parse(jsonMatch[0]);
         if (cmd.action === 'add') {
@@ -335,21 +331,33 @@ async function processVoiceCommand(transcript) {
 }
 
 async function addTodoByVoice(title) {
-  if (!authToken) { speak(currentLang === 'zh' ? '请先登录' : 'Please login first'); return; }
+  console.log('addTodoByVoice called:', title);
+  if (!authToken) { 
+    console.error('Not logged in'); 
+    speak(currentLang === 'zh' ? '请先登录' : 'Please login first'); 
+    return; 
+  }
   try {
     const newTodo = {
       title, completed: false, created_at: new Date().toISOString(),
       category: null, priority: 'medium', dueDate: null, recurring: 'none', subtasks: []
     };
-    await fetch(`${DATABASE_URL}/${getUserPath()}.json`, {
+    const path = getUserPath();
+    console.log('Posting to:', DATABASE_URL + '/' + path + '.json');
+    const response = await fetch(`${DATABASE_URL}/${path}.json`, {
       method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(newTodo)
     });
+    console.log('Response:', response.status);
+    if (!response.ok) throw new Error('Firebase error: ' + response.status);
     const message = t('voiceAdded') + ': ' + title;
     speak(message);
     showVoiceStatus(message, 'success');
     showMessage(t('addSuccess') + ': ' + title, 'success');
     fetchTodos();
-  } catch (error) { speak(currentLang === 'zh' ? '添加失败' : 'Failed'); }
+  } catch (error) { 
+    console.error('addTodoByVoice error:', error); 
+    speak(currentLang === 'zh' ? '添加失败' : 'Failed'); 
+  }
 }
 
 async function showTodosByVoice() {
