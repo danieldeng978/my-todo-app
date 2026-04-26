@@ -4,7 +4,7 @@
 const DATABASE_URL = 'https://first-ad067-default-rtdb.asia-southeast1.firebasedatabase.app';
 
 // ==================== OpenClaw AI 配置 ====================
-const OPENCLAW_URL = 'https://javascript-cases-liberal-throughout.trycloudflare.com';
+const OPENCLAW_URL = 'https://cab-workforce-montgomery-adjustment.trycloudflare.com';
 const OPENCLAW_TOKEN = '8ee111989ee570c12ac29329f7d1b0cf26568fc9ad55c2fe';
 const MINIMAX_TTS_URL = 'https://api.minimax.chat/v1/t2a_v2'; // MiniMax TTS API
 const MINIMAX_API_KEY = ''; // 从 OpenClaw 获取或直接配置
