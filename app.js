@@ -131,12 +131,16 @@ function initVoiceRecognition() {
     isListening = false;
     updateVoiceButton();
     hideVoiceStatus();
+    const overlay = document.getElementById('voiceOverlay');
+    if (overlay) overlay.style.display = 'none';
   };
   
   voiceRecognition.onerror = (event) => {
     isListening = false;
     updateVoiceButton();
     hideVoiceStatus();
+    const overlay = document.getElementById('voiceOverlay');
+    if (overlay) overlay.style.display = 'none';
     if (event.error === 'not-allowed') showMessage(t('voicePermission'), 'error');
     else showMessage(t('voiceError'), 'error');
   };
@@ -152,14 +156,20 @@ function startListening() {
   if (isListening) { voiceRecognition.stop(); return; }
   voiceRecognition.lang = currentLang === 'zh' ? 'zh-CN' : 'en-US';
   voiceRecognition.start();
+  const overlay = document.getElementById('voiceOverlay');
+  const btn = document.getElementById('voiceBtn');
+  if (overlay) overlay.style.display = 'flex';
+  if (btn) { btn.innerHTML = '🔴'; btn.classList.add('listening'); }
 }
 
 function updateVoiceButton() {
   const btn = document.getElementById('voiceBtn');
+  const overlay = document.getElementById('voiceOverlay');
   if (btn) {
     if (isListening) { btn.innerHTML = '🔴'; btn.classList.add('listening'); }
-    else { btn.innerHTML = '🎤'; btn.classList.remove('listening'); }
+    else { btn.innerHTML = '🤖'; btn.classList.remove('listening'); }
   }
+  if (overlay && !isListening) overlay.style.display = 'none';
 }
 
 function showVoiceStatus(text, type, autoHide = true) {
@@ -835,9 +845,7 @@ function handleKeyboardShortcuts(e) {
 // ==================== 语音机器人 UI ====================
 
 function toggleVoiceRobot() {
-  voiceRobotExpanded = !voiceRobotExpanded;
-  const robot = document.querySelector('.voice-robot');
-  if (robot) robot.classList.toggle('expanded', voiceRobotExpanded);
+  startListening();
 }
 
 function renderVoiceRobot() {
@@ -863,6 +871,10 @@ function renderVoiceRobot() {
             <span class="voice-label">${t('voiceHint')}</span>
           </button>
         </div>
+      </div>
+      <div class="voice-listening-overlay" id="voiceOverlay" style="display:none">
+        <div class="voice-wave-anim">🎤</div>
+        <p>${t('voiceListening')}</p>
       </div>
     </div>
   `;
