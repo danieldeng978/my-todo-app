@@ -3,6 +3,12 @@
 
 const DATABASE_URL = 'https://first-ad067-default-rtdb.asia-southeast1.firebasedatabase.app';
 
+// ==================== OpenClaw AI 配置 ====================
+const OPENCLAW_URL = 'https://javascript-cases-liberal-throughout.trycloudflare.com';
+const OPENCLAW_TOKEN = '8ee111989ee570c12ac29329f7d1b0cf26568fc9ad55c2fe';
+const MINIMAX_TTS_URL = 'https://api.minimax.chat/v1/t2a_v2'; // MiniMax TTS API
+const MINIMAX_API_KEY = ''; // 从 OpenClaw 获取或直接配置
+
 // ==================== 国际化 ====================
 
 const translations = {
@@ -189,58 +195,113 @@ function hideVoiceStatus() {
 }
 
 function speak(text) {
-  if (!voiceSynthesis) return;
-  voiceSynthesis.cancel();
-  const utterance = new SpeechSynthesisUtterance(text);
-  utterance.lang = currentLang === 'zh' ? 'zh-CN' : 'en-US';
-  utterance.rate = 1;
-  utterance.pitch = 1;
-  const voices = voiceSynthesis.getVoices();
-  const targetLang = currentLang === 'zh' ? 'zh' : 'en';
-  const foundVoice = voices.find(v => v.lang.startsWith(targetLang));
-  if (foundVoice) utterance.voice = foundVoice;
-  voiceSynthesis.speak(utterance);
+  speakWithMiniMaxTTS(text);
+}
+
+// ==================== AI 助手 ====================
+
+let aiConversationHistory = [];
+
+async function callOpenAI(text) {
+  try {
+    const response = await fetch(`${OPENCLAW_URL}/v1/chat/completions`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${OPENCLAW_TOKEN}`
+      },
+      body: JSON.stringify({
+        model: 'openclaw',
+        messages: [
+          { role: 'system', content: `你是Todo App的AI语音助手。用户会用语音和你对话。你需要：
+1. 理解用户意图（添加待办、查看待办、一般对话等）
+2. 如果是待办相关操作，返回JSON格式命令：
+   - 添加待办: {"action":"add","title":"待办内容","priority":"medium"}
+   - 查看待办: {"action":"show"}
+   - 删除待办: {"action":"delete","title":"待办内容"}
+3. 如果是一般对话，用自然语言回复
+4. 回复要简短（50字以内），适合语音播报
+5. 使用用户相同的语言回复` },
+          ...aiConversationHistory,
+          { role: 'user', content: text }
+        ],
+        max_tokens: 200,
+        temperature: 0.7
+      })
+    });
+    const data = await response.json();
+    return data.choices?.[0]?.message?.content || '';
+  } catch (error) {
+    console.error('OpenAI API error:', error);
+    return null;
+  }
+}
+
+async function speakWithMiniMaxTTS(text) {
+  // 使用浏览器 TTS 作为后备
+  if (voiceSynthesis) {
+    voiceSynthesis.cancel();
+    const utterance = new SpeechSynthesisUtterance(text);
+    utterance.lang = currentLang === 'zh' ? 'zh-CN' : 'en-US';
+    utterance.rate = 1.1;
+    utterance.pitch = 1;
+    const voices = voiceSynthesis.getVoices();
+    const targetLang = currentLang === 'zh' ? 'zh' : 'en';
+    const foundVoice = voices.find(v => v.lang.startsWith(targetLang));
+    if (foundVoice) utterance.voice = foundVoice;
+    voiceSynthesis.speak(utterance);
+  }
 }
 
 async function processVoiceCommand(transcript) {
-  const zhAdd = ['添加', '加', '新建', '创建'];
-  const enAdd = ['add', 'create', 'new', 'todo'];
-  const zhShow = ['显示', '查看', '我的待办', '有什么'];
-  const enShow = ['show', 'list', 'my todos', 'what'];
+  showVoiceStatus(currentLang === 'zh' ? 'AI思考中...' : 'AI thinking...', 'listening');
   
-  let added = false;
-  for (const p of zhAdd) {
-    if (transcript.includes(p)) {
-      const title = transcript.split(p).pop().trim();
-      if (title) { await addTodoByVoice(title); added = true; break; }
-    }
+  // 添加到对话历史
+  aiConversationHistory.push({ role: 'user', content: transcript });
+  
+  const response = await callOpenAI(transcript);
+  
+  if (!response) {
+    speakWithMiniMaxTTS(currentLang === 'zh' ? '抱歉，服务暂时不可用' : 'Sorry, service unavailable');
+    return;
   }
-  if (!added) {
-    for (const p of enAdd) {
-      if (transcript.includes(p)) {
-        const parts = transcript.split(p);
-        const title = parts[parts.length - 1].trim();
-        if (title && title.length > 1) { await addTodoByVoice(title); added = true; break; }
+  
+  // 尝试解析JSON命令
+  try {
+    if (response.includes('{"action"')) {
+      const jsonMatch = response.match(/\{[^{}]+\}/);
+      if (jsonMatch) {
+        const cmd = JSON.parse(jsonMatch[0]);
+        if (cmd.action === 'add') {
+          await addTodoByVoice(cmd.title);
+          speakWithMiniMaxTTS(currentLang === 'zh' ? `已添加待办：${cmd.title}` : `Added: ${cmd.title}`);
+          aiConversationHistory.push({ role: 'assistant', content: response });
+          return;
+        } else if (cmd.action === 'show') {
+          await showTodosByVoice();
+          aiConversationHistory.push({ role: 'assistant', content: response });
+          return;
+        } else if (cmd.action === 'delete') {
+          speakWithMiniMaxTTS(currentLang === 'zh' ? '删除功能需要手动操作' : 'Delete requires manual操作');
+          aiConversationHistory.push({ role: 'assistant', content: response });
+          return;
+        }
       }
     }
+  } catch (e) {
+    // 不是JSON，用作对话回复
   }
-  if (added) return;
   
-  let showed = false;
-  for (const p of zhShow) {
-    if (transcript.includes(p)) { await showTodosByVoice(); showed = true; break; }
-  }
-  if (!showed) {
-    for (const p of enShow) {
-      if (transcript.includes(p)) { await showTodosByVoice(); showed = true; break; }
-    }
-  }
-  if (showed) return;
+  // 对话回复
+  aiConversationHistory.push({ role: 'assistant', content: response });
   
-  if (transcript.includes('帮助') || transcript.includes('help')) {
-    speak(t('voiceHelp'));
-    showVoiceStatus(t('voiceHelp'), 'info');
+  // 限制历史长度
+  if (aiConversationHistory.length > 10) {
+    aiConversationHistory = aiConversationHistory.slice(-10);
   }
+  
+  speakWithMiniMaxTTS(response);
+  showVoiceStatus(response.substring(0, 50), 'success');
 }
 
 async function addTodoByVoice(title) {
