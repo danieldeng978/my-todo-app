@@ -162,7 +162,7 @@ function updateVoiceButton() {
   }
 }
 
-function showVoiceStatus(text, type) {
+function showVoiceStatus(text, type, autoHide = true) {
   const existing = document.querySelector('.voice-status');
   if (existing) existing.remove();
   const status = document.createElement('div');
@@ -170,6 +170,7 @@ function showVoiceStatus(text, type) {
   status.innerHTML = `<span class="voice-wave">🔊</span><span>${text}</span>`;
   const robot = document.querySelector('.voice-robot');
   if (robot) robot.appendChild(status);
+  if (autoHide) setTimeout(() => { const el = document.querySelector('.voice-status'); if (el) el.remove(); }, 3000);
 }
 
 function hideVoiceStatus() {
