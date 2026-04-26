@@ -360,6 +360,14 @@ async function addTodoByVoice(title) {
     speak(message);
     showVoiceStatus(message, 'success');
     showMessage(t('addSuccess') + ': ' + title, 'success');
+    
+    // 记录习惯数据
+    const currentHour = new Date().getHours();
+    recordAddBehavior(title, null, 'medium', currentHour);
+    
+    // 检查是否需要推送习惯提醒
+    setTimeout(() => checkAndNotifyHabits(), 3000);
+    
     fetchTodos();
   } catch (error) { 
     console.error('addTodoByVoice error:', error); 
@@ -900,6 +908,14 @@ async function renderStats() {
         <div class="alert-item week"><span>📆 ${t('dueThisWeek')}</span><strong>${stats.dueThisWeek}</strong></div>
       </div>
     </div>
+    <div class="stats-section">
+      <h4>🤖 AI 习惯分析</h4>
+      <div class="habit-stats">
+        <div class="habit-item"><span>📊 学习数据</span><strong>${getHabitStats().totalTasks} 条</strong></div>
+        <div class="habit-item"><span>⏰ 最活跃时间</span><strong>${getHabitStats().mostActiveHour}:00</strong></div>
+        <div class="habit-item"><span>📈 完成率</span><strong>${getHabitStats().completionRate}%</strong></div>
+      </div>
+    </div>
   `;
   document.querySelector('.container').prepend(dashboard);
 }
@@ -1262,6 +1278,7 @@ async function handleAuth(action) {
 async function init() {
   applyDarkMode();
   initVoiceRecognition();
+  loadHabitData(); // 加载习惯数据
   if (voiceSynthesis) {
     // 预加载 voices
     const loadVoices = () => {
@@ -1304,3 +1321,258 @@ window.toggleVoiceRobot = toggleVoiceRobot; window.startListening = startListeni
 window.createShare = createShare; window.joinShare = joinShare; window.exitShare = exitShare;
 window.addSubtask = addSubtask; window.toggleSubtask = toggleSubtask; window.deleteSubtask = deleteSubtask;
 window.toggleSubtasksVisibility = toggleSubtasksVisibility;
+
+// ==================== AI 习惯学习系统 ====================
+
+const HABIT_STORAGE_KEY = 'todo_habit_data';
+
+// 习惯数据结构
+let habitData = {
+  addPatterns: [],      // 添加模式
+  timePatterns: {},      // 时间模式 {hour: count}
+  categoryChoices: {},   // 分类选择
+  priorityChoices: {},    // 优先级选择
+  recurringTasks: [],     // 重复任务
+  completedPatterns: [],   // 完成模式
+  lastUpdated: null
+};
+
+// 加载习惯数据
+function loadHabitData() {
+  try {
+    const stored = localStorage.getItem(HABIT_STORAGE_KEY);
+    if (stored) {
+      habitData = JSON.parse(stored);
+    }
+  } catch (e) {
+    console.error('Failed to load habit data:', e);
+  }
+}
+
+// 保存习惯数据
+function saveHabitData() {
+  try {
+    habitData.lastUpdated = new Date().toISOString();
+    localStorage.setItem(HABIT_STORAGE_KEY, JSON.stringify(habitData));
+  } catch (e) {
+    console.error('Failed to save habit data:', e);
+  }
+}
+
+// 记录添加行为
+function recordAddBehavior(title, category, priority, hour) {
+  loadHabitData();
+  
+  // 记录时间模式
+  if (!habitData.timePatterns[hour]) {
+    habitData.timePatterns[hour] = 0;
+  }
+  habitData.timePatterns[hour]++;
+  
+  // 记录分类选择
+  if (category) {
+    if (!habitData.categoryChoices[category]) {
+      habitData.categoryChoices[category] = 0;
+    }
+    habitData.categoryChoices[category]++;
+  }
+  
+  // 记录优先级选择
+  if (!habitData.priorityChoices[priority]) {
+    habitData.priorityChoices[priority] = 0;
+  }
+  habitData.priorityChoices[priority]++;
+  
+  // 分析任务类型关键词
+  const keywords = extractKeywords(title);
+  habitData.addPatterns.push({
+    title,
+    keywords,
+    hour,
+    timestamp: new Date().toISOString()
+  });
+  
+  // 只保留最近100条
+  if (habitData.addPatterns.length > 100) {
+    habitData.addPatterns = habitData.addPatterns.slice(-100);
+  }
+  
+  saveHabitData();
+}
+
+// 记录完成行为
+function recordCompleteBehavior(title, duration) {
+  loadHabitData();
+  habitData.completedPatterns.push({
+    title,
+    duration, // 从创建到完成的时间（小时）
+    timestamp: new Date().toISOString()
+  });
+  
+  if (habitData.completedPatterns.length > 100) {
+    habitData.completedPatterns = habitData.completedPatterns.slice(-100);
+  }
+  
+  saveHabitData();
+}
+
+// 提取关键词
+function extractKeywords(title) {
+  const words = title.toLowerCase().split(/[\s,.，。!?]+/);
+  const commonWords = ['的', '了', '和', '与', '去', '做', 'the', 'a', 'an', 'to', '的', '我', '要', '请'];
+  return words.filter(w => w.length > 1 && !commonWords.includes(w));
+}
+
+// 获取最常见小时
+function getMostActiveHour() {
+  loadHabitData();
+  let maxHour = 9;
+  let maxCount = 0;
+  
+  for (const [hour, count] of Object.entries(habitData.timePatterns)) {
+    if (count > maxCount) {
+      maxCount = count;
+      maxHour = parseInt(hour);
+    }
+  }
+  
+  return maxHour;
+}
+
+// 获取最常用分类
+function getMostUsedCategory() {
+  loadHabitData();
+  let maxCat = null;
+  let maxCount = 0;
+  
+  for (const [cat, count] of Object.entries(habitData.categoryChoices)) {
+    if (count > maxCount) {
+      maxCount = count;
+      maxCat = cat;
+    }
+  }
+  
+  return maxCat;
+}
+
+// 获取最常用优先级
+function getMostUsedPriority() {
+  loadHabitData();
+  let maxPriority = 'medium';
+  let maxCount = 0;
+  
+  for (const [priority, count] of Object.entries(habitData.priorityChoices)) {
+    if (count > maxCount) {
+      maxCount = count;
+      maxPriority = priority;
+    }
+  }
+  
+  return maxPriority;
+}
+
+// 生成添加推荐
+function getAddRecommendation() {
+  loadHabitData();
+  
+  const currentHour = new Date().getHours();
+  const mostActiveHour = getMostActiveHour();
+  const mostUsedCategory = getMostUsedCategory();
+  const mostUsedPriority = getMostUsedPriority();
+  
+  // 检查是否是习惯添加时间
+  const isActiveHour = Math.abs(currentHour - mostActiveHour) <= 1;
+  
+  if (isActiveHour && habitData.addPatterns.length > 5) {
+    // 分析最近的任务
+    const recentTitles = habitData.addPatterns.slice(-10).map(p => p.title);
+    const suggestions = analyzePatterns(recentTitles);
+    
+    if (suggestions.length > 0) {
+      return {
+        type: 'recommendation',
+        message: currentLang === 'zh' 
+          ? `你习惯在${mostActiveHour}点添加任务，现在要添加"${suggestions[0]}"吗？`
+          : `You usually add tasks at ${mostActiveHour}:00. Add "${suggestions[0]}" now?`,
+        suggestedTitle: suggestions[0],
+        category: mostUsedCategory,
+        priority: mostUsedPriority
+      };
+    }
+  }
+  
+  return null;
+}
+
+// 分析模式给出建议
+function analyzePatterns(titles) {
+  const suggestions = [];
+  
+  // 检查是否有重复模式
+  const wordCount = {};
+  titles.forEach(title => {
+    const words = title.toLowerCase().split(/[\s,.，。!?]+/);
+    words.forEach(word => {
+      if (word.length > 1) {
+        wordCount[word] = (wordCount[word] || 0) + 1;
+      }
+    });
+  });
+  
+  // 找出高频词汇组合
+  for (const [word, count] of Object.entries(wordCount)) {
+    if (count >= 3 && !['的', '了', '和', '与'].includes(word)) {
+      suggestions.push(word);
+    }
+  }
+  
+  return suggestions.slice(0, 3);
+}
+
+// 获取习惯统计
+function getHabitStats() {
+  loadHabitData();
+  
+  const totalTasks = habitData.addPatterns.length;
+  const completedTasks = habitData.completedPatterns.length;
+  const completionRate = totalTasks > 0 ? Math.round((completedTasks / totalTasks) * 100) : 0;
+  const mostActiveHour = getMostActiveHour();
+  const mostUsedCategory = getMostUsedCategory();
+  const mostUsedPriority = getMostUsedPriority();
+  
+  return {
+    totalTasks,
+    completedTasks,
+    completionRate,
+    mostActiveHour,
+    mostUsedCategory,
+    mostUsedPriority,
+    activeDays: Object.keys(habitData.timePatterns).length
+  };
+}
+
+// 主动习惯提醒
+function checkAndNotifyHabits() {
+  const recommendation = getAddRecommendation();
+  
+  if (recommendation && !isSharedMode) {
+    if (notificationsEnabled) {
+      sendNotification(
+        '💡 习惯提醒',
+        recommendation.message,
+        '🤖'
+      );
+    }
+    
+    // 语音提醒
+    if (currentLang === 'zh') {
+      speakWithMiniMaxTTS('检测到你的习惯添加时间，要添加任务吗？');
+    } else {
+      speakWithMiniMaxTTS('Time for your usual task. Want to add one?');
+    }
+    
+    return recommendation;
+  }
+  
+  return null;
+}
