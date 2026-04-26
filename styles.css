@@ -397,6 +397,7 @@ body.dark .todo-date {
   font-size: 14px;
   z-index: 1000;
   animation: slideDown 0.3s ease;
+  transition: opacity 0.3s ease;
 }
 
 .message.success {

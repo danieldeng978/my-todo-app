@@ -1022,8 +1022,17 @@ function updateStats(todos) {
 function showMessage(text, type) {
   messageEl.textContent = text;
   messageEl.className = `message ${type}`;
+  messageEl.style.opacity = '1';
   messageEl.style.display = 'block';
-  setTimeout(() => { messageEl.textContent = ''; messageEl.className = 'message'; messageEl.style.display = 'none'; }, 1500);
+  clearTimeout(messageEl.hideTimer);
+  messageEl.hideTimer = setTimeout(() => {
+    messageEl.style.opacity = '0';
+    setTimeout(() => {
+      messageEl.style.display = 'none';
+      messageEl.textContent = '';
+      messageEl.className = 'message';
+    }, 300);
+  }, 1500);
 }
 
 // ==================== UI ====================
