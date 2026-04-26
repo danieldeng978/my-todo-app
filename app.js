@@ -112,6 +112,7 @@ function applyDarkMode() {
 
 let voiceRecognition = null;
 let voiceSynthesis = window.speechSynthesis;
+let voicesLoaded = false;
 let isListening = false;
 let voiceRobotExpanded = false;
 
@@ -238,19 +239,44 @@ async function callOpenAI(text) {
 }
 
 async function speakWithMiniMaxTTS(text) {
-  // 使用浏览器 TTS 作为后备
-  if (voiceSynthesis) {
-    voiceSynthesis.cancel();
-    const utterance = new SpeechSynthesisUtterance(text);
-    utterance.lang = currentLang === 'zh' ? 'zh-CN' : 'en-US';
-    utterance.rate = 1.1;
-    utterance.pitch = 1;
-    const voices = voiceSynthesis.getVoices();
-    const targetLang = currentLang === 'zh' ? 'zh' : 'en';
-    const foundVoice = voices.find(v => v.lang.startsWith(targetLang));
-    if (foundVoice) utterance.voice = foundVoice;
-    voiceSynthesis.speak(utterance);
+  // 使用浏览器 TTS
+  if (!voiceSynthesis) {
+    console.error('Speech synthesis not supported');
+    return;
   }
+  
+  // 确保 voices 加载完成
+  if (!voicesLoaded) {
+    return new Promise((resolve) => {
+      const checkVoices = () => {
+        const voices = voiceSynthesis.getVoices();
+        if (voices.length > 0) {
+          voicesLoaded = true;
+          doSpeak(text);
+          resolve();
+        } else {
+          setTimeout(checkVoices, 100);
+        }
+      };
+      checkVoices();
+    });
+  } else {
+    doSpeak(text);
+  }
+}
+
+function doSpeak(text) {
+  voiceSynthesis.cancel();
+  const utterance = new SpeechSynthesisUtterance(text);
+  utterance.lang = currentLang === 'zh' ? 'zh-CN' : 'en-US';
+  utterance.rate = 1.1;
+  utterance.pitch = 1;
+  const voices = voiceSynthesis.getVoices();
+  const targetLang = currentLang === 'zh' ? 'zh' : 'en';
+  const foundVoice = voices.find(v => v.lang.startsWith(targetLang));
+  if (foundVoice) utterance.voice = foundVoice;
+  console.log('Speaking:', text, 'with voice:', foundVoice?.name);
+  voiceSynthesis.speak(utterance);
 }
 
 async function processVoiceCommand(transcript) {
@@ -1217,7 +1243,18 @@ async function handleAuth(action) {
 async function init() {
   applyDarkMode();
   initVoiceRecognition();
-  if (voiceSynthesis) voiceSynthesis.onvoiceschanged = () => {};
+  if (voiceSynthesis) {
+    // 预加载 voices
+    const loadVoices = () => {
+      const voices = voiceSynthesis.getVoices();
+      if (voices.length > 0) {
+        voicesLoaded = true;
+        console.log('Voices loaded:', voices.length);
+      }
+    };
+    loadVoices();
+    voiceSynthesis.onvoiceschanged = loadVoices;
+  }
   const urlParams = new URLSearchParams(window.location.search);
   const shareCode = urlParams.get('share');
   const langParam = urlParams.get('lang');
