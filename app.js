@@ -170,7 +170,7 @@ function showVoiceStatus(text, type, autoHide = true) {
   status.innerHTML = `<span class="voice-wave">🔊</span><span>${text}</span>`;
   const robot = document.querySelector('.voice-robot');
   if (robot) robot.appendChild(status);
-  if (autoHide) setTimeout(() => { const el = document.querySelector('.voice-status'); if (el) el.remove(); }, 3000);
+  if (autoHide) setTimeout(() => { const el = document.querySelector('.voice-status'); if (el) el.remove(); }, 1500);
 }
 
 function hideVoiceStatus() {
@@ -1023,7 +1023,7 @@ function showMessage(text, type) {
   messageEl.textContent = text;
   messageEl.className = `message ${type}`;
   messageEl.style.display = 'block';
-  setTimeout(() => { messageEl.textContent = ''; messageEl.className = 'message'; messageEl.style.display = 'none'; }, 3000);
+  setTimeout(() => { messageEl.textContent = ''; messageEl.className = 'message'; messageEl.style.display = 'none'; }, 1500);
 }
 
 // ==================== UI ====================
