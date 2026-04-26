@@ -1,5 +1,5 @@
-// public/app.js - Todo App V11: Dark Mode + Recurring + Subtasks + Shortcuts
-// 添加全部新功能
+// public/app.js - Todo App V11 + Voice Robot
+// 添加语音机器人功能
 
 const DATABASE_URL = 'https://first-ad067-default-rtdb.asia-southeast1.firebasedatabase.app';
 
@@ -7,7 +7,7 @@ const DATABASE_URL = 'https://first-ad067-default-rtdb.asia-southeast1.firebased
 
 const translations = {
   zh: {
-    appName: 'Todo App', version: '全功能版', welcome: '欢迎', guest: '访客', logout: '退出登录',
+    appName: 'Todo App', version: '语音版', welcome: '欢迎', guest: '访客', logout: '退出登录',
     login: '登录', register: '注册', email: '邮箱', password: '密码', addTodo: '添加待办...', add: '添加',
     search: '搜索...', clear: '清除', all: '全部', categories: '分类', addCategory: '添加分类',
     export: '导出', import: '导入', stats: '统计', share: '分享', joinShare: '加入分享',
@@ -34,10 +34,14 @@ const translations = {
     enterShareCode: '输入分享码:', shareUrl: '分享链接', language: '语言', chinese: '中文', english: 'English',
     darkMode: '深色模式', lightMode: '浅色模式', recurring: '重复', daily: '每天', weekly: '每周',
     monthly: '每月', none: '不重复', subtasks: '子任务', addSubtask: '添加子任务', subtaskPlaceholder: '输入子任务...',
-    shortcuts: '快捷键', pressShortcut: '按 {key} 快速操作', keyboardShortcuts: '键盘快捷键'
+    shortcuts: '快捷键', pressShortcut: '按 {key} 快速操作', keyboardShortcuts: '键盘快捷键',
+    voiceRobot: '语音助手', voiceListening: '正在听...', voiceHint: '点击说话', voiceNotSupported: '语音不支持',
+    voicePermission: '请允许麦克风权限', voiceError: '语音识别错误', voiceTimeout: '没有听到声音',
+    voiceAdded: '已添加待办', voiceShowed: '这是你的待办', voiceEmpty: '暂无待办', voiceCompleted: '已完成',
+    voicePending: '进行中', voiceHelp: '可以说"添加待办吃饭"或"显示我的待办"'
   },
   en: {
-    appName: 'Todo App', version: 'Full Features', welcome: 'Welcome', guest: 'Guest', logout: 'Logout',
+    appName: 'Todo App', version: 'Voice Version', welcome: 'Welcome', guest: 'Guest', logout: 'Logout',
     login: 'Login', register: 'Register', email: 'Email', password: 'Password', addTodo: 'Add todo...', add: 'Add',
     search: 'Search...', clear: 'Clear', all: 'All', categories: 'Categories', addCategory: 'Add Category',
     export: 'Export', import: 'Import', stats: 'Stats', share: 'Share', joinShare: 'Join Share',
@@ -64,7 +68,11 @@ const translations = {
     enterShareCode: 'Enter share code:', shareUrl: 'Share URL', language: 'Language', chinese: '中文', english: 'English',
     darkMode: 'Dark Mode', lightMode: 'Light Mode', recurring: 'Recurring', daily: 'Daily', weekly: 'Weekly',
     monthly: 'Monthly', none: 'No Repeat', subtasks: 'Subtasks', addSubtask: 'Add Subtask', subtaskPlaceholder: 'Enter subtask...',
-    shortcuts: 'Shortcuts', pressShortcut: 'Press {key} for quick action', keyboardShortcuts: 'Keyboard Shortcuts'
+    shortcuts: 'Shortcuts', pressShortcut: 'Press {key} for quick action', keyboardShortcuts: 'Keyboard Shortcuts',
+    voiceRobot: 'Voice Assistant', voiceListening: 'Listening...', voiceHint: 'Tap to speak', voiceNotSupported: 'Voice not supported',
+    voicePermission: 'Please allow microphone', voiceError: 'Voice recognition error', voiceTimeout: 'No voice detected',
+    voiceAdded: 'Todo added', voiceShowed: 'Here are your todos', voiceEmpty: 'No todos yet', voiceCompleted: 'completed',
+    voicePending: 'pending', voiceHelp: 'Say "add todo eat" or "show my todos"'
   }
 };
 
@@ -90,11 +98,175 @@ function toggleDarkMode() {
 }
 
 function applyDarkMode() {
-  if (isDarkMode) {
-    document.body.classList.add('dark');
-  } else {
-    document.body.classList.remove('dark');
+  if (isDarkMode) document.body.classList.add('dark');
+  else document.body.classList.remove('dark');
+}
+
+// ==================== 语音机器人系统 ====================
+
+let voiceRecognition = null;
+let voiceSynthesis = window.speechSynthesis;
+let isListening = false;
+let voiceRobotExpanded = false;
+
+function isVoiceSupported() {
+  return 'webkitSpeechRecognition' in window || 'SpeechRecognition' in window;
+}
+
+function initVoiceRecognition() {
+  if (!isVoiceSupported()) return;
+  const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+  voiceRecognition = new SpeechRecognition();
+  voiceRecognition.continuous = false;
+  voiceRecognition.interimResults = false;
+  voiceRecognition.lang = currentLang === 'zh' ? 'zh-CN' : 'en-US';
+  
+  voiceRecognition.onstart = () => {
+    isListening = true;
+    updateVoiceButton();
+    showVoiceStatus(t('voiceListening'), 'listening');
+  };
+  
+  voiceRecognition.onend = () => {
+    isListening = false;
+    updateVoiceButton();
+    hideVoiceStatus();
+  };
+  
+  voiceRecognition.onerror = (event) => {
+    isListening = false;
+    updateVoiceButton();
+    hideVoiceStatus();
+    if (event.error === 'not-allowed') showMessage(t('voicePermission'), 'error');
+    else showMessage(t('voiceError'), 'error');
+  };
+  
+  voiceRecognition.onresult = (event) => {
+    const transcript = event.results[0][0].transcript.toLowerCase().trim();
+    processVoiceCommand(transcript);
+  };
+}
+
+function startListening() {
+  if (!isVoiceSupported()) { showMessage(t('voiceNotSupported'), 'error'); return; }
+  if (isListening) { voiceRecognition.stop(); return; }
+  voiceRecognition.lang = currentLang === 'zh' ? 'zh-CN' : 'en-US';
+  voiceRecognition.start();
+}
+
+function updateVoiceButton() {
+  const btn = document.getElementById('voiceBtn');
+  if (btn) {
+    if (isListening) { btn.innerHTML = '🔴'; btn.classList.add('listening'); }
+    else { btn.innerHTML = '🎤'; btn.classList.remove('listening'); }
   }
+}
+
+function showVoiceStatus(text, type) {
+  const existing = document.querySelector('.voice-status');
+  if (existing) existing.remove();
+  const status = document.createElement('div');
+  status.className = `voice-status ${type}`;
+  status.innerHTML = `<span class="voice-wave">🔊</span><span>${text}</span>`;
+  const robot = document.querySelector('.voice-robot');
+  if (robot) robot.appendChild(status);
+}
+
+function hideVoiceStatus() {
+  const existing = document.querySelector('.voice-status');
+  if (existing) setTimeout(() => existing.remove(), 1500);
+}
+
+function speak(text) {
+  if (!voiceSynthesis) return;
+  voiceSynthesis.cancel();
+  const utterance = new SpeechSynthesisUtterance(text);
+  utterance.lang = currentLang === 'zh' ? 'zh-CN' : 'en-US';
+  utterance.rate = 1;
+  utterance.pitch = 1;
+  const voices = voiceSynthesis.getVoices();
+  const targetLang = currentLang === 'zh' ? 'zh' : 'en';
+  const foundVoice = voices.find(v => v.lang.startsWith(targetLang));
+  if (foundVoice) utterance.voice = foundVoice;
+  voiceSynthesis.speak(utterance);
+}
+
+async function processVoiceCommand(transcript) {
+  const zhAdd = ['添加', '加', '新建', '创建'];
+  const enAdd = ['add', 'create', 'new', 'todo'];
+  const zhShow = ['显示', '查看', '我的待办', '有什么'];
+  const enShow = ['show', 'list', 'my todos', 'what'];
+  
+  let added = false;
+  for (const p of zhAdd) {
+    if (transcript.includes(p)) {
+      const title = transcript.split(p).pop().trim();
+      if (title) { await addTodoByVoice(title); added = true; break; }
+    }
+  }
+  if (!added) {
+    for (const p of enAdd) {
+      if (transcript.includes(p)) {
+        const parts = transcript.split(p);
+        const title = parts[parts.length - 1].trim();
+        if (title && title.length > 1) { await addTodoByVoice(title); added = true; break; }
+      }
+    }
+  }
+  if (added) return;
+  
+  let showed = false;
+  for (const p of zhShow) {
+    if (transcript.includes(p)) { await showTodosByVoice(); showed = true; break; }
+  }
+  if (!showed) {
+    for (const p of enShow) {
+      if (transcript.includes(p)) { await showTodosByVoice(); showed = true; break; }
+    }
+  }
+  if (showed) return;
+  
+  if (transcript.includes('帮助') || transcript.includes('help')) {
+    speak(t('voiceHelp'));
+    showVoiceStatus(t('voiceHelp'), 'info');
+  }
+}
+
+async function addTodoByVoice(title) {
+  if (!authToken) { speak(currentLang === 'zh' ? '请先登录' : 'Please login first'); return; }
+  try {
+    const newTodo = {
+      title, completed: false, created_at: new Date().toISOString(),
+      category: null, priority: 'medium', dueDate: null, recurring: 'none', subtasks: []
+    };
+    await fetch(`${DATABASE_URL}/${getUserPath()}.json`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(newTodo)
+    });
+    const message = t('voiceAdded') + ': ' + title;
+    speak(message);
+    showVoiceStatus(message, 'success');
+    showMessage(t('addSuccess') + ': ' + title, 'success');
+    fetchTodos();
+  } catch (error) { speak(currentLang === 'zh' ? '添加失败' : 'Failed'); }
+}
+
+async function showTodosByVoice() {
+  if (!authToken) { speak(currentLang === 'zh' ? '请先登录' : 'Please login first'); return; }
+  try {
+    const todos = await fetchTodosRaw();
+    if (todos.length === 0) { speak(t('voiceEmpty')); showVoiceStatus(t('voiceEmpty'), 'info'); return; }
+    const pending = todos.filter(t => !t.completed);
+    const completed = todos.filter(t => t.completed);
+    let message = '';
+    if (pending.length > 0) {
+      message += `${t('voicePending')}: ${pending.length}. `;
+      if (pending.length <= 3) message += pending.map(t => t.title).join(', ');
+      else { message += pending.slice(0, 3).map(t => t.title).join(', '); message += `, ${pending.length - 3} more`; }
+    }
+    if (completed.length > 0) message += `. ${t('voiceCompleted')}: ${completed.length}`;
+    speak(message);
+    showVoiceStatus(message, 'info');
+  } catch (error) { speak(currentLang === 'zh' ? '读取失败' : 'Failed to load'); }
 }
 
 // ==================== 用户状态 ====================
@@ -141,23 +313,10 @@ function hashPassword(password) {
   return 'hash_' + Math.abs(hash).toString(36);
 }
 
-function generateUserId() {
-  return 'user_' + Date.now().toString(36) + Math.random().toString(36).substr(2, 9);
-}
-
-function generateShareCode() {
-  return Math.random().toString(36).substring(2, 8).toUpperCase();
-}
-
-function escapeHtml(text) {
-  const div = document.createElement('div');
-  div.textContent = text;
-  return div.innerHTML;
-}
-
-function escapeRegex(string) {
-  return string.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-}
+function generateUserId() { return 'user_' + Date.now().toString(36) + Math.random().toString(36).substr(2, 9); }
+function generateShareCode() { return Math.random().toString(36).substring(2, 8).toUpperCase(); }
+function escapeHtml(text) { const div = document.createElement('div'); div.textContent = text; return div.innerHTML; }
+function escapeRegex(string) { return string.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'); }
 
 function getRepeatDate(recurring, currentDate) {
   if (!recurring || recurring === 'none') return null;
@@ -192,9 +351,7 @@ function toggleNotifications() {
     notificationsEnabled = false;
     localStorage.setItem('todo_notifications', 'false');
     showMessage(t('notificationsDisabled'), 'success');
-  } else {
-    requestNotificationPermission();
-  }
+  } else requestNotificationPermission();
   updateNotificationUI();
 }
 
@@ -212,7 +369,7 @@ function sendNotification(title, body, icon = '📋') {
     const notification = new Notification(title, { body, icon, tag: 'todo-app' });
     notification.onclick = () => { window.focus(); notification.close(); };
     setTimeout(() => notification.close(), 5000);
-  } catch (e) { console.log('Notification error:', e); }
+  } catch (e) {}
 }
 
 async function checkDueNotifications() {
@@ -380,9 +537,7 @@ async function deleteCategory(catId) {
   if (!authToken || catId === 'all' || isSharedMode) return;
   const todos = await fetchTodosRaw();
   for (const todo of todos) {
-    if (todo.category === catId) {
-      await fetch(`${DATABASE_URL}/${getUserPath()}/${todo.id}.json`, { method: 'DELETE' });
-    }
+    if (todo.category === catId) await fetch(`${DATABASE_URL}/${getUserPath()}/${todo.id}.json`, { method: 'DELETE' });
   }
   await fetch(`${DATABASE_URL}/${getCategoriesPath()}/${catId}.json`, { method: 'DELETE' });
   currentCategory = 'all';
@@ -394,12 +549,16 @@ async function deleteCategory(catId) {
 async function fetchTodosRaw() {
   const path = getUserPath();
   if (!path) return [];
-  const response = await fetch(`${DATABASE_URL}/${path}.json`);
-  const data = await response.json();
-  if (isSharedMode) {
-    return data && data.todos ? Object.entries(data.todos).map(([id, todo]) => ({ id, ...todo })) : [];
+  try {
+    const response = await fetch(`${DATABASE_URL}/${path}.json`);
+    if (!response.ok) { if (response.status === 403) showMessage('⚠️ Firebase 权限不足', 'error'); return []; }
+    const data = await response.json();
+    if (isSharedMode) return data && data.todos ? Object.entries(data.todos).map(([id, todo]) => ({ id, ...todo })) : [];
+    return data ? Object.entries(data).map(([id, todo]) => ({ id, ...todo })) : [];
+  } catch (error) {
+    if (error.message.includes('Failed to fetch') || error.message.includes('NetworkError')) showMessage('⚠️ 网络问题，请检查网络后刷新', 'error');
+    return [];
   }
-  return data ? Object.entries(data).map(([id, todo]) => ({ id, ...todo })) : [];
 }
 
 async function fetchTodos() {
@@ -418,9 +577,7 @@ async function fetchTodos() {
   todos.sort((a, b) => {
     if (a.dueDate && !b.dueDate) return -1;
     if (!a.dueDate && b.dueDate) return 1;
-    if (a.dueDate && b.dueDate) {
-      if (a.dueDate !== b.dueDate) return new Date(a.dueDate) - new Date(b.dueDate);
-    }
+    if (a.dueDate && b.dueDate && a.dueDate !== b.dueDate) return new Date(a.dueDate) - new Date(b.dueDate);
     return new Date(b.created_at) - new Date(a.created_at);
   });
   
@@ -440,8 +597,6 @@ async function addTodo() {
   if (!authToken && !isSharedMode) { showMessage(t('pleaseInput') + t('login'), 'error'); return; }
   
   const dueDate = prompt(`${t('setDate')} (${t('dateFormat')})\n${t('skip')}:`, '');
-  
-  // 重复设置
   const recurringOptions = `1. ${t('none')}\n2. ${t('daily')}\n3. ${t('weekly')}\n4. ${t('monthly')}`;
   const recurringChoice = prompt(`${t('recurring')}:\n${recurringOptions}`, '1');
   const recurringMap = { '1': 'none', '2': 'daily', '3': 'weekly', '4': 'monthly' };
@@ -449,14 +604,10 @@ async function addTodo() {
   
   try {
     const newTodo = {
-      title,
-      completed: false,
-      created_at: new Date().toISOString(),
+      title, completed: false, created_at: new Date().toISOString(),
       category: currentCategory === 'all' ? null : currentCategory,
       priority: currentPriority === 'all' ? 'medium' : currentPriority,
-      dueDate: dueDate ? dueDate : null,
-      recurring: recurring,
-      subtasks: []
+      dueDate: dueDate ? dueDate : null, recurring: recurring, subtasks: []
     };
     
     if (isSharedMode) {
@@ -478,24 +629,16 @@ async function addTodo() {
 async function toggleTodo(id) {
   try {
     let url = `${DATABASE_URL}/${getUserPath()}`;
-    if (isSharedMode) url += `/todos/${id}`;
-    else url += `/${id}`;
+    if (isSharedMode) url += `/todos/${id}`; else url += `/${id}`;
     
     const getResponse = await fetch(url + '.json');
     const todo = await getResponse.json();
     
-    // 如果完成且有重复，创建下一个
     if (!todo.completed && todo.recurring && todo.recurring !== 'none') {
       const nextDate = getRepeatDate(todo.recurring, todo.dueDate);
       const newTodo = {
-        title: todo.title,
-        completed: false,
-        created_at: new Date().toISOString(),
-        category: todo.category,
-        priority: todo.priority,
-        dueDate: nextDate,
-        recurring: todo.recurring,
-        subtasks: []
+        title: todo.title, completed: false, created_at: new Date().toISOString(),
+        category: todo.category, priority: todo.priority, dueDate: nextDate, recurring: todo.recurring, subtasks: []
       };
       if (isSharedMode) {
         await fetch(`${DATABASE_URL}/${getUserPath()}/todos.json`, {
@@ -508,15 +651,10 @@ async function toggleTodo(id) {
       }
       showMessage(`${t('completed')} - ${t('recurring')}: ${nextDate}`, 'success');
     } else {
-      if (!todo.completed && notificationsEnabled) {
-        sendNotification('✅ ' + t('completed'), `"${todo.title.slice(0, 20)}..." ${t('completed')}`, '🎉');
-      }
+      if (!todo.completed && notificationsEnabled) sendNotification('✅ ' + t('completed'), `"${todo.title.slice(0, 20)}..." ${t('completed')}`, '🎉');
     }
     
-    await fetch(url, {
-      method: 'PATCH', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ completed: !todo.completed })
-    });
+    await fetch(url, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ completed: !todo.completed }) });
     fetchTodos();
   } catch (error) { showMessage(error.message, 'error'); }
 }
@@ -534,8 +672,7 @@ async function setDueDate(id, currentDate) {
   const newDate = prompt(`${t('changeDate')} (${t('dateFormat')})\n${t('deleteDate')}:`, currentDate || '');
   try {
     let url = `${DATABASE_URL}/${getUserPath()}`;
-    if (isSharedMode) url += `/todos/${id}`;
-    else url += `/${id}`;
+    if (isSharedMode) url += `/todos/${id}`; else url += `/${id}`;
     
     if (newDate === '') {
       await fetch(url, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ dueDate: null }) });
@@ -543,10 +680,6 @@ async function setDueDate(id, currentDate) {
     } else if (newDate) {
       await fetch(url, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ dueDate: newDate }) });
       showMessage(t('setDateSuccess'), 'success');
-      const today = new Date().toISOString().split('T')[0];
-      if (newDate === today && notificationsEnabled) {
-        sendNotification('📅 ' + t('dueToday'), `${t('dueToday')}: ${newDate}`, '🟡');
-      }
     }
     fetchTodos();
   } catch (error) { showMessage(error.message, 'error'); }
@@ -558,23 +691,13 @@ async function addSubtask(todoId) {
   if (isSharedMode) { showMessage(t('shareReadOnly'), 'error'); return; }
   const subtaskTitle = prompt(t('subtaskPlaceholder'), '');
   if (!subtaskTitle || !subtaskTitle.trim()) return;
-  
   try {
     let url = `${DATABASE_URL}/${getUserPath()}/${todoId}.json`;
     const response = await fetch(url);
     const todo = await response.json();
-    
     const subtasks = todo.subtasks || [];
-    subtasks.push({
-      id: 'st_' + Date.now(),
-      title: subtaskTitle.trim(),
-      completed: false
-    });
-    
-    await fetch(url, {
-      method: 'PATCH', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ subtasks })
-    });
+    subtasks.push({ id: 'st_' + Date.now(), title: subtaskTitle.trim(), completed: false });
+    await fetch(url, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ subtasks }) });
     fetchTodos();
   } catch (error) { showMessage(error.message, 'error'); }
 }
@@ -585,15 +708,11 @@ async function toggleSubtask(todoId, subtaskId) {
     let url = `${DATABASE_URL}/${getUserPath()}/${todoId}.json`;
     const response = await fetch(url);
     const todo = await response.json();
-    
     const subtasks = todo.subtasks || [];
     const subtask = subtasks.find(st => st.id === subtaskId);
     if (subtask) {
       subtask.completed = !subtask.completed;
-      await fetch(url, {
-        method: 'PATCH', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ subtasks })
-      });
+      await fetch(url, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ subtasks }) });
       fetchTodos();
     }
   } catch (error) { showMessage(error.message, 'error'); }
@@ -605,12 +724,8 @@ async function deleteSubtask(todoId, subtaskId) {
     let url = `${DATABASE_URL}/${getUserPath()}/${todoId}.json`;
     const response = await fetch(url);
     const todo = await response.json();
-    
     const subtasks = (todo.subtasks || []).filter(st => st.id !== subtaskId);
-    await fetch(url, {
-      method: 'PATCH', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ subtasks })
-    });
+    await fetch(url, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ subtasks }) });
     fetchTodos();
   } catch (error) { showMessage(error.message, 'error'); }
 }
@@ -620,37 +735,23 @@ async function deleteSubtask(todoId, subtaskId) {
 async function getStats() {
   const todos = await fetchTodosRaw();
   const stats = {
-    total: todos.length, completed: todos.filter(t => t.completed).length,
-    pending: todos.filter(t => !t.completed).length,
-    byPriority: {
-      high: todos.filter(t => t.priority === 'high').length,
-      medium: todos.filter(t => t.priority === 'medium').length,
-      low: todos.filter(t => t.priority === 'low').length
-    },
+    total: todos.length, completed: todos.filter(t => t.completed).length, pending: todos.filter(t => !t.completed).length,
+    byPriority: { high: todos.filter(t => t.priority === 'high').length, medium: todos.filter(t => t.priority === 'medium').length, low: todos.filter(t => t.priority === 'low').length },
     byCategory: {},
     overdue: todos.filter(t => t.dueDate && !t.completed && t.dueDate < new Date().toISOString().split('T')[0]).length,
-    dueToday: todos.filter(t => t.dueDate && !t.completed && t.dueDate === new Date().toISOString().split('T')[0]).length,
-    dueThisWeek: 0
+    dueToday: todos.filter(t => t.dueDate && !t.completed && t.dueDate === new Date().toISOString().split('T')[0]).length, dueThisWeek: 0
   };
   const today = new Date();
   const weekEnd = new Date(today);
   weekEnd.setDate(weekEnd.getDate() + 7);
   todos.filter(t => t.dueDate && !t.completed).forEach(t => {
-    if (t.dueDate >= new Date().toISOString().split('T')[0] && t.dueDate <= weekEnd.toISOString().split('T')[0]) {
-      stats.dueThisWeek++;
-    }
+    if (t.dueDate >= new Date().toISOString().split('T')[0] && t.dueDate <= weekEnd.toISOString().split('T')[0]) stats.dueThisWeek++;
   });
-  categories.forEach(cat => {
-    stats.byCategory[cat.id] = todos.filter(t => t.category === cat.id).length;
-  });
+  categories.forEach(cat => { stats.byCategory[cat.id] = todos.filter(t => t.category === cat.id).length; });
   return stats;
 }
 
-async function toggleStats() {
-  showStats = !showStats;
-  if (showStats) renderStats();
-  else hideStats();
-}
+async function toggleStats() { showStats = !showStats; if (showStats) renderStats(); else hideStats(); }
 
 async function renderStats() {
   const existing = document.querySelector('.stats-dashboard');
@@ -686,10 +787,7 @@ async function renderStats() {
   document.querySelector('.container').prepend(dashboard);
 }
 
-function hideStats() {
-  const existing = document.querySelector('.stats-dashboard');
-  if (existing) existing.remove();
-}
+function hideStats() { const existing = document.querySelector('.stats-dashboard'); if (existing) existing.remove(); }
 
 // ==================== 快捷键 ====================
 
@@ -697,7 +795,6 @@ function toggleShortcuts() {
   showShortcuts = !showShortcuts;
   const existing = document.querySelector('.shortcuts-panel');
   if (existing) existing.remove();
-  
   if (showShortcuts) {
     const panel = document.createElement('div');
     panel.className = 'shortcuts-panel';
@@ -710,6 +807,7 @@ function toggleShortcuts() {
         <div class="shortcut-item"><kbd>D</kbd> <span>${currentLang === 'zh' ? '切换深色模式' : 'Toggle dark mode'}</span></div>
         <div class="shortcut-item"><kbd>L</kbd> <span>${currentLang === 'zh' ? '切换语言' : 'Toggle language'}</span></div>
         <div class="shortcut-item"><kbd>S</kbd> <span>${currentLang === 'zh' ? '统计面板' : 'Stats panel'}</span></div>
+        <div class="shortcut-item"><kbd>V</kbd> <span>${currentLang === 'zh' ? '语音助手' : 'Voice assistant'}</span></div>
         <div class="shortcut-item"><kbd>?</kbd> <span>${currentLang === 'zh' ? '显示帮助' : 'Show help'}</span></div>
       </div>
     `;
@@ -718,41 +816,56 @@ function toggleShortcuts() {
 }
 
 function handleKeyboardShortcuts(e) {
-  // 如果在输入框中，只处理特定快捷键
   if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA') {
-    if (e.key === 'Escape') {
-      e.target.blur();
-    }
+    if (e.key === 'Escape') e.target.blur();
     return;
   }
-  
   switch (e.key) {
-    case '/':
-      e.preventDefault();
-      document.getElementById('searchInput')?.focus();
-      break;
-    case 'Escape':
-      clearSearch();
-      const shortcutsPanel = document.querySelector('.shortcuts-panel');
-      if (shortcutsPanel) shortcutsPanel.remove();
-      showShortcuts = false;
-      break;
-    case 'd':
-    case 'D':
-      toggleDarkMode();
-      break;
-    case 'l':
-    case 'L':
-      toggleLanguage();
-      break;
-    case 's':
-    case 'S':
-      toggleStats();
-      break;
-    case '?':
-      toggleShortcuts();
-      break;
+    case '/': e.preventDefault(); document.getElementById('searchInput')?.focus(); break;
+    case 'Escape': clearSearch(); const sp = document.querySelector('.shortcuts-panel'); if (sp) sp.remove(); showShortcuts = false; break;
+    case 'd': case 'D': toggleDarkMode(); break;
+    case 'l': case 'L': toggleLanguage(); break;
+    case 's': case 'S': toggleStats(); break;
+    case 'v': case 'V': toggleVoiceRobot(); break;
+    case '?': toggleShortcuts(); break;
   }
+}
+
+// ==================== 语音机器人 UI ====================
+
+function toggleVoiceRobot() {
+  voiceRobotExpanded = !voiceRobotExpanded;
+  const robot = document.querySelector('.voice-robot');
+  if (robot) robot.classList.toggle('expanded', voiceRobotExpanded);
+}
+
+function renderVoiceRobot() {
+  const existing = document.querySelector('.voice-robot-container');
+  if (existing) existing.remove();
+  const container = document.createElement('div');
+  container.className = 'voice-robot-container';
+  container.innerHTML = `
+    <div class="voice-robot ${voiceRobotExpanded ? 'expanded' : ''}">
+      <button id="voiceBtn" class="voice-robot-btn" onclick="toggleVoiceRobot()">🤖</button>
+      <div class="voice-content">
+        <div class="voice-header">
+          <span class="voice-title">${t('voiceRobot')}</span>
+          <button class="voice-close" onclick="toggleVoiceRobot()">×</button>
+        </div>
+        <div class="voice-body">
+          <div class="voice-hint">
+            <p>${t('voiceHint')}</p>
+            <p class="voice-commands">${currentLang === 'zh' ? '• "添加待办吃饭"<br>• "显示我的待办"<br>• "帮助"' : '• "add todo eat"<br>• "show my todos"<br>• "help"'}</p>
+          </div>
+          <button id="voiceRecordBtn" class="voice-record-btn" onclick="startListening()">
+            <span class="voice-icon">🎤</span>
+            <span class="voice-label">${t('voiceHint')}</span>
+          </button>
+        </div>
+      </div>
+    </div>
+  `;
+  document.body.appendChild(container);
 }
 
 // ==================== 导出/导入 ====================
@@ -762,19 +875,10 @@ async function exportData() {
   try {
     const todos = await fetchTodosRaw();
     const cats = await fetchCategories();
-    const exportData = {
-      version: 'V11',
-      exportDate: new Date().toISOString(),
-      userEmail: userEmail,
-      todos: todos,
-      categories: cats
-    };
+    const exportData = { version: 'V11+Voice', exportDate: new Date().toISOString(), userEmail: userEmail, todos: todos, categories: cats };
     const blob = new Blob([JSON.stringify(exportData, null, 2)], { type: 'application/json' });
     const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = `todo-backup-${new Date().toISOString().split('T')[0]}.json`;
-    a.click();
+    const a = document.createElement('a'); a.href = url; a.download = `todo-backup-${new Date().toISOString().split('T')[0]}.json`; a.click();
     URL.revokeObjectURL(url);
     showMessage(`${t('exportSuccess')} ${todos.length} ${t('total')}`, 'success');
   } catch (error) { showMessage(t('exportFailed'), 'error'); }
@@ -782,9 +886,7 @@ async function exportData() {
 
 async function importData() {
   if (!authToken || isSharedMode) return;
-  const input = document.createElement('input');
-  input.type = 'file';
-  input.accept = '.json';
+  const input = document.createElement('input'); input.type = 'file'; input.accept = '.json';
   input.onchange = async (e) => {
     const file = e.target.files[0];
     if (!file) return;
@@ -795,26 +897,19 @@ async function importData() {
       const overwrite = confirm(`Import ${data.todos.length} todos\n\nOK=${t('overwrite')}, Cancel=${t('append')}`);
       if (overwrite) {
         const existingTodos = await fetchTodosRaw();
-        for (const todo of existingTodos) {
-          await fetch(`${DATABASE_URL}/${getUserPath()}/${todo.id}.json`, { method: 'DELETE' });
-        }
+        for (const todo of existingTodos) await fetch(`${DATABASE_URL}/${getUserPath()}/${todo.id}.json`, { method: 'DELETE' });
       }
       let imported = 0;
       for (const todo of data.todos) {
         const newTodo = {
-          title: todo.title, completed: todo.completed || false,
-          created_at: todo.created_at || new Date().toISOString(),
-          category: todo.category || null, priority: todo.priority || 'medium',
-          dueDate: todo.dueDate || null, recurring: todo.recurring || 'none', subtasks: todo.subtasks || []
+          title: todo.title, completed: todo.completed || false, created_at: todo.created_at || new Date().toISOString(),
+          category: todo.category || null, priority: todo.priority || 'medium', dueDate: todo.dueDate || null, recurring: todo.recurring || 'none', subtasks: todo.subtasks || []
         };
-        await fetch(`${DATABASE_URL}/${getUserPath()}.json`, {
-          method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(newTodo)
-        });
+        await fetch(`${DATABASE_URL}/${getUserPath()}.json`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(newTodo) });
         imported++;
       }
       showMessage(`${t('importSuccess')} ${imported} ${t('total')}`, 'success');
-      loadCategories();
-      fetchTodos();
+      loadCategories(); fetchTodos();
     } catch (error) { showMessage(t('importFailed') + ': ' + error.message, 'error'); }
   };
   input.click();
@@ -822,11 +917,7 @@ async function importData() {
 
 // ==================== 搜索 ====================
 
-function performSearch(query) {
-  searchQuery = query.trim();
-  renderSearchResults();
-  fetchTodos();
-}
+function performSearch(query) { searchQuery = query.trim(); renderSearchResults(); fetchTodos(); }
 
 function renderSearchResults() {
   const existing = document.querySelector('.search-results-info');
@@ -852,33 +943,21 @@ function clearSearch() {
 function renderTodos(todos) {
   todoList.innerHTML = '';
   if (!authToken && !isSharedMode) return;
-  
-  if (todos.length === 0) {
-    todoList.innerHTML = `<li class="empty-state"><span>📋</span><p>${searchQuery ? t('noResults') : t('noTodosYet')}</p></li>`;
-    return;
-  }
-  
+  if (todos.length === 0) { todoList.innerHTML = `<li class="empty-state"><span>📋</span><p>${searchQuery ? t('noResults') : t('noTodosYet')}</p></li>`; return; }
   const today = new Date().toISOString().split('T')[0];
-  
   todos.forEach(todo => {
     const cat = categories.find(c => c.id === todo.category);
     const priority = PRIORITIES.find(p => p.id === todo.priority) || PRIORITIES[1];
-    
-    let overdueClass = '';
-    let overdueText = '';
+    let overdueClass = '', overdueText = '';
     if (todo.dueDate && !todo.completed) {
       if (todo.dueDate < today) { overdueClass = 'overdue'; overdueText = '🔴 ' + t('overdueTask'); }
       else if (todo.dueDate === today) { overdueText = '🟡 ' + t('dueTodayTask'); }
     }
-    
-    // 重复图标
     let recurringIcon = '';
     if (todo.recurring && todo.recurring !== 'none') {
-      const recurringIconMap = { daily: '🔁', weekly: '🔂', monthly: '🔄' };
-      recurringIcon = recurringIconMap[todo.recurring] || '';
+      const m = { daily: '🔁', weekly: '🔂', monthly: '🔄' };
+      recurringIcon = m[todo.recurring] || '';
     }
-    
-    // 子任务
     let subtasksHtml = '';
     const subtasks = todo.subtasks || [];
     if (subtasks.length > 0) {
@@ -904,11 +983,9 @@ function renderTodos(todos) {
     } else if (!isSharedMode) {
       subtasksHtml = `<div class="add-subtask-inline" onclick="addSubtask('${todo.id}')">➕ ${t('subtasks')}</div>`;
     }
-    
     const li = document.createElement('li');
     li.className = `todo-item ${todo.completed ? 'completed' : ''} ${overdueClass}`;
     li.style.borderLeft = `4px solid ${priority.color}`;
-    
     li.innerHTML = `
       <div class="todo-main">
         <input type="checkbox" class="todo-checkbox" ${todo.completed ? 'checked' : ''} onchange="toggleTodo('${todo.id}')">
@@ -926,9 +1003,7 @@ function renderTodos(todos) {
 
 function toggleSubtasksVisibility(todoId) {
   const list = document.getElementById(`subtasks-${todoId}`);
-  if (list) {
-    list.style.display = list.style.display === 'none' ? 'block' : 'none';
-  }
+  if (list) list.style.display = list.style.display === 'none' ? 'block' : 'none';
 }
 
 function highlightMatch(text, query) {
@@ -951,13 +1026,7 @@ function showMessage(text, type) {
 
 // ==================== UI ====================
 
-async function loadCategories() {
-  await fetchCategories();
-  renderCategoryTabs();
-  renderPriorityTabs();
-  renderSearchResults();
-  fetchTodos();
-}
+async function loadCategories() { await fetchCategories(); renderCategoryTabs(); renderPriorityTabs(); renderSearchResults(); fetchTodos(); }
 
 function renderCategoryTabs() {
   const existing = document.querySelector('.category-tabs');
@@ -1001,7 +1070,7 @@ function showAddCategory() {
 function showLogin() {
   document.querySelector('header').innerHTML = `
     <h1>📝 ${t('appName')}</h1>
-    <p>🌙 ${t('version')}</p>
+    <p>🎤 ${t('version')}</p>
     <div class="auth-form">
       <input type="email" id="authEmail" placeholder="${t('email')}">
       <input type="password" id="authPassword" placeholder="${t('password')}">
@@ -1017,16 +1086,10 @@ function showLogin() {
 
 function showApp() {
   PRIORITIES[0].name = t('urgent'); PRIORITIES[1].name = t('important'); PRIORITIES[2].name = t('normal');
-  
   const searchHTML = `<div class="search-box"><input type="text" id="searchInput" placeholder="🔍 ${t('search')}" oninput="performSearch(this.value)"></div>`;
-  
   let shareHTML = '';
-  if (isSharedMode) {
-    shareHTML = `<div class="share-mode-banner"><span>🤝 ${t('sharedMode')}: ${currentShareCode}</span><button onclick="exitShare()" class="exit-share-btn">${t('exitShare')}</button></div>`;
-  } else if (authToken) {
-    shareHTML = `<div class="share-bar"><button onclick="createShare()" class="share-btn">🔗 ${t('createShare')}</button><button onclick="joinShare()" class="join-btn">🤝 ${t('joinShare')}</button></div>`;
-  }
-  
+  if (isSharedMode) shareHTML = `<div class="share-mode-banner"><span>🤝 ${t('sharedMode')}: ${currentShareCode}</span><button onclick="exitShare()" class="exit-share-btn">${t('exitShare')}</button></div>`;
+  else if (authToken) shareHTML = `<div class="share-bar"><button onclick="createShare()" class="share-btn">🔗 ${t('createShare')}</button><button onclick="joinShare()" class="join-btn">🤝 ${t('joinShare')}</button></div>`;
   const exportHTML = !isSharedMode ? `
     <div class="export-import-bar">
       <button onclick="exportData()" class="export-btn">📤 ${t('export')}</button>
@@ -1035,7 +1098,6 @@ function showApp() {
       <button onclick="toggleNotifications()" id="notificationBtn" class="notification-btn ${notificationsEnabled ? 'enabled' : 'disabled'}">${notificationsEnabled ? '🔔 ' + t('notificationsOn') : '🔕 ' + t('notificationsOff')}</button>
     </div>
   ` : `<div class="export-import-bar"><button onclick="toggleStats()" class="stats-btn">📊 ${t('stats')}</button></div>`;
-  
   document.querySelector('header').innerHTML = `
     <div class="header-top">
       <div>
@@ -1049,12 +1111,13 @@ function showApp() {
         ${authToken && !isSharedMode ? `<button onclick="logout()" class="logout-btn">${t('logout')}</button>` : ''}
       </div>
     </div>
-    <p style="font-size: 12px; color: #888; margin-top: 5px;">🌙 ${t('version')}</p>
+    <p style="font-size: 12px; color: #888; margin-top: 5px;">🎤 ${t('version')}</p>
     ${shareHTML}
     ${searchHTML}
     ${exportHTML}
   `;
   loadCategories();
+  renderVoiceRobot();
 }
 
 async function handleAuth(action) {
@@ -1069,51 +1132,24 @@ async function handleAuth(action) {
 
 async function init() {
   applyDarkMode();
-  
+  initVoiceRecognition();
+  if (voiceSynthesis) voiceSynthesis.onvoiceschanged = () => {};
   const urlParams = new URLSearchParams(window.location.search);
   const shareCode = urlParams.get('share');
   const langParam = urlParams.get('lang');
   const darkParam = urlParams.get('dark');
-  
-  if (langParam && (langParam === 'zh' || langParam === 'en')) {
-    currentLang = langParam;
-    localStorage.setItem('todo_lang', currentLang);
-  }
-  if (darkParam === 'true') {
-    isDarkMode = true;
-    localStorage.setItem('todo_dark_mode', 'true');
-    applyDarkMode();
-  }
-  
-  if (shareCode) {
-    currentShareCode = shareCode.toUpperCase();
-    isSharedMode = true;
-    localStorage.setItem('todo_share_code', currentShareCode);
-    showMessage(t('joinedShare'), 'success');
-  }
-  
-  if (authToken && userEmail) {
-    currentUser = { id: authToken, email: userEmail };
-    showApp();
-  } else if (currentShareCode) {
-    showApp();
-  } else {
-    showLogin();
-  }
-  
-  document.addEventListener('visibilitychange', () => {
-    if (document.visibilityState === 'visible' && authToken) checkDueNotifications();
-  });
-  
-  // 监听键盘快捷键
+  if (langParam && (langParam === 'zh' || langParam === 'en')) { currentLang = langParam; localStorage.setItem('todo_lang', currentLang); }
+  if (darkParam === 'true') { isDarkMode = true; localStorage.setItem('todo_dark_mode', 'true'); applyDarkMode(); }
+  if (shareCode) { currentShareCode = shareCode.toUpperCase(); isSharedMode = true; localStorage.setItem('todo_share_code', currentShareCode); showMessage(t('joinedShare'), 'success'); }
+  if (authToken && userEmail) { currentUser = { id: authToken, email: userEmail }; showApp(); }
+  else if (currentShareCode) showApp();
+  else showLogin();
+  document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible' && authToken) checkDueNotifications(); });
   document.addEventListener('keydown', handleKeyboardShortcuts);
 }
 
 addBtn.addEventListener('click', addTodo);
-todoInput.addEventListener('keypress', (e) => {
-  if (e.key === 'Enter' && todoInput.value.trim()) addTodo();
-});
-
+todoInput.addEventListener('keypress', (e) => { if (e.key === 'Enter' && todoInput.value.trim()) addTodo(); });
 document.addEventListener('DOMContentLoaded', init);
 
 // 全局函数
@@ -1124,6 +1160,7 @@ window.deleteCategory = deleteCategory; window.showAddCategory = showAddCategory
 window.exportData = exportData; window.importData = importData;
 window.toggleStats = toggleStats; window.toggleNotifications = toggleNotifications;
 window.toggleLanguage = toggleLanguage; window.toggleDarkMode = toggleDarkMode; window.toggleShortcuts = toggleShortcuts;
+window.toggleVoiceRobot = toggleVoiceRobot; window.startListening = startListening;
 window.createShare = createShare; window.joinShare = joinShare; window.exitShare = exitShare;
 window.addSubtask = addSubtask; window.toggleSubtask = toggleSubtask; window.deleteSubtask = deleteSubtask;
 window.toggleSubtasksVisibility = toggleSubtasksVisibility;
