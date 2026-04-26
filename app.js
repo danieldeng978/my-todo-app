@@ -294,7 +294,7 @@ async function processVoiceCommand(transcript) {
   
   // 尝试解析JSON命令
   try {
-    if (response.includes('{"action"')) {
+    if (response.includes('action')) {
       const jsonMatch = response.match(/\{.*\}/s);
       if (jsonMatch) {
         const cmd = JSON.parse(jsonMatch[0]);
